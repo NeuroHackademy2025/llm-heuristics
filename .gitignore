@@ -1,0 +1,99 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Unit test reports
+.tox/
+.nox/
+.cache
+nosetests.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Pyre type checker
+.pyre/
+
+# Ruff
+.ruff_cache/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Mac
+.DS_Store
+
+# LLM and model cache
+models/
+*.bin
+*.safetensors
+*.onnx
+
+# DICOM and medical imaging data
+*.dcm
+*.IMA
+*.nii
+*.nii.gz
+
+# Output files
+heuristic.py
+generated_heuristic.py
+dicom_analysis.txt
+*.tsv
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Model downloads
+.cache/
+.huggingface/
+
+# Apptainer
+.dockerignore
+
+# Example data directories
+sample_dicom_data/
+test_data/
+example_data/

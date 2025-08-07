@@ -1,0 +1,121 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llm-heuristics"
+description = "LLM-based DICOM header analysis and heuristic file generation for heudiconv"
+readme = "README.md"
+license = "BSD-3-Clause"
+requires-python = ">=3.9"
+authors = [{ name = "LLM Heuristics Developers" }]
+maintainers = [{ name = "LLM Heuristics Developers" }]
+keywords = ["neuroimaging", "DICOM", "BIDS", "heudiconv", "LLM"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "heudiconv>=1.3.1",
+    "pydicom>=2.4.0",
+    "transformers>=4.30.0",
+    "torch>=2.0.0",
+    "pandas>=1.5.0",
+    "numpy>=1.24.0",
+    "click>=8.0.0",
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
+    "jinja2>=3.1.0",
+    "accelerate>=0.20.0",
+    "bitsandbytes>=0.41.0",
+    "bidsschematools>=0.7.0",
+    "requests>=2.28.0",
+    "pyyaml>=6.0",
+    "jsonschema>=4.0.0",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+all = ["llm-heuristics[docs,test,dev]"]
+dev = ["pre-commit", "ruff"]
+docs = [
+    "sphinx>=6.0",
+    "sphinx-rtd-theme",
+    "sphinx-autoapi",
+    "myst-parser",
+    "sphinx-click",
+]
+test = ["pytest>=7.0", "pytest-mock", "pytest-xdist"]
+
+[project.scripts]
+llm-heuristics = "llm_heuristics.cli:main"
+
+[project.urls]
+"Homepage" = "https://github.com/NeuroHackademy2025/llm-heuristics"
+"Documentation" = "https://llm-heuristics.readthedocs.io"
+"Repository" = "https://github.com/NeuroHackademy2025/llm-heuristics.git"
+"Bug Tracker" = "https://github.com/NeuroHackademy2025/llm-heuristics/issues"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "llm_heuristics/_version.py"
+
+# Ruff linting and formatting
+[tool.ruff]
+line-length = 99
+target-version = "py39"
+exclude = ["test_output/"]
+
+[tool.ruff.lint]
+extend-select = [
+    "F",   # pyflakes
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "FA",  # flake8-future-annotations
+    "PIE", # flake8-pie
+    "T20", # flake8-print
+    "SIM", # flake8-simplify
+    "LOG", # flake8-logging
+    "G",   # flake8-logging-format
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
+"**/test_*.py" = ["T20"]
+"**/tests/*.py" = ["T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["llm_heuristics"]
+force-single-line = true
+
+# Ruff formatting
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+
+# Pytest configuration
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]

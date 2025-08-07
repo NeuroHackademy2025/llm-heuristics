@@ -1,0 +1,57 @@
+BSD 3-Clause License
+
+Copyright (c) 2025, LLM Heuristics Developers
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+----
+
+THIRD PARTY COMPONENTS
+
+This software uses Large Language Models that may be subject to separate license terms:
+
+Llama Models:
+The Llama models (Meta-Llama-3.1-70B-Instruct, Meta-Llama-3.1-8B-Instruct) are
+distributed by Meta under a custom license. Users must obtain appropriate access
+and comply with Meta's licensing terms separately. This includes:
+
+- Reviewing and accepting Meta's Llama Community License Agreement
+- Obtaining access through HuggingFace after approval from Meta
+- Complying with Meta's Acceptable Use Policy
+- Understanding any commercial use restrictions
+
+The Llama models are NOT included in this BSD license and are subject to Meta's
+separate licensing terms. See https://ai.meta.com/llama/license/ for details.
+
+Users are responsible for:
+- Obtaining proper licenses for any models they use
+- Ensuring compliance with all applicable model licensing terms
+- Understanding restrictions on commercial use, if any
+- Reviewing the specific license terms of each model used
+
+This software is designed to work with various models, and users may substitute
+alternative models that have compatible licenses if desired.
