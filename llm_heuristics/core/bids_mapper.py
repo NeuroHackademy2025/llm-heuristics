@@ -233,16 +233,18 @@ EXAMPLE OUTPUT FORMAT:
                 continue
 
             try:
+                # Include ALL grouping variables used by SequencesGrouper
                 group_info = {
                     "protocol_name": str(row.get("protocol_name", "Unknown")),
                     "series_description": str(row.get("series_description", "Unknown")),
                     "sequence_name": str(row.get("sequence_name", "Unknown")),
-                    "dimensions": (
-                        f"{row.get('dim1', 0)}x{row.get('dim2', 0)}x"
-                        f"{row.get('dim3', 0)}x{row.get('dim4', 1)}"
-                    ),
+                    "dim1": row.get("dim1", 0),
+                    "dim2": row.get("dim2", 0),
+                    "dim3": row.get("dim3", 0),
+                    "dim4": row.get("dim4", 1),
                     "TR": row.get("TR", 0),
                     "TE": row.get("TE", 0),
+                    "is_derived": row.get("is_derived", False),
                     "is_motion_corrected": row.get("is_motion_corrected", False),
                     "image_type": str(row.get("image_type", "Unknown")),
                     "series_count": row.get("series_count", 1),
