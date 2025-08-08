@@ -184,7 +184,6 @@ llm-heuristics map /path/to/output \
 
 - **First run**: Models are downloaded from HuggingFace and cached locally
 - **Subsequent runs**: Uses cached models for faster startup
-- **Cache location**: `~/.cache/huggingface/` (configurable via `HF_HOME`)
 - **Access**: Requires HuggingFace account with appropriate model access
 - **Quantization**: Enabled by default to reduce memory usage
 
@@ -249,15 +248,24 @@ export LOG_LEVEL="INFO"
 ```bash
 # Set your HuggingFace token
 export HF_TOKEN="your_huggingface_token"
+export HF_HOME="/path/to/hf/home"
 
-# Run setup script (downloads both 70B and 8B models)
-./setup_models.sh
+pip install huggingface_hub
+huggingface-cli login
+
+cd $HF_HOME
+hf download meta-llama/Meta-Llama-3.1-8B-Instruct --local-dir ./meta-llama/Meta-Llama-3.1-8B-Instruct
+hf download meta-llama/Meta-Llama-3.1-70B-Instruct --local-dir ./meta-llama/Meta-Llama-3.1-70B-Instruct
+
+
+# if you get error
+export HF_HUB_READ_TIMEOUT=120
+export HF_HUB_CONNECTION_TIMEOUT=30
+
+hf download meta-llama/Meta-Llama-3.1-70B-Instruct \
+  --local-dir ./meta-llama/Meta-Llama-3.1-70B-Instruct \
+  --max-workers 4
 ```
-
-The setup script will:
-- Download models to `~/.cache/huggingface/` by default
-- Use `$HF_HOME` if set (e.g., `export HF_HOME=~/llm-models`)
-- Cache models for future use
 
 ### Getting HuggingFace Access
 
