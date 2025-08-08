@@ -30,19 +30,19 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 USER llmuser
-WORKDIR /home/llmuser/app
+WORKDIR /home/llmuser/llm-heuristics
 
 # Copy only necessary files (avoids .git and other excluded files)
-COPY --chown=llmuser:llmuser pyproject.toml README.md /home/llmuser/app/
-COPY --chown=llmuser:llmuser llm_heuristics/ /home/llmuser/app/llm_heuristics/
+COPY --chown=llmuser:llmuser pyproject.toml README.md /home/llmuser/llm-heuristics/
+COPY --chown=llmuser:llmuser llm_heuristics/ /home/llmuser/llm-heuristics/llm_heuristics/
 
 # Ensure no .git artifacts are present (cleanup just in case)
-RUN find /home/llmuser/app -name ".git*" -type f -delete 2>/dev/null || true && \
-    find /home/llmuser/app -name ".git" -type d -exec rm -rf {} + 2>/dev/null || true
+RUN find /home/llmuser/llm-heuristics -name ".git*" -type f -delete 2>/dev/null || true && \
+    find /home/llmuser/llm-heuristics -name ".git" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # Set version for setuptools-scm (since .git folder isn't available in Docker)
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=0.1.0 \
-    PYTHONPATH="/home/llmuser/.local/lib/python3.12/site-packages:/home/llmuser/app"
+    PYTHONPATH="/home/llmuser/.local/lib/python3.12/site-packages:/home/llmuser/llm-heuristics"
 
 # Upgrade pip and install dependencies from pyproject.toml
 RUN python3 -m pip install --upgrade pip setuptools wheel --break-system-packages && \
