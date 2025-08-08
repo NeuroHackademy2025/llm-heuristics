@@ -99,17 +99,22 @@ class LLMBIDSMapper:
         return result_df
 
     def _get_mri_modalities(self) -> list[str]:
-        """Dynamically get MRI modalities from BIDS schema."""
+        """Dynamically get MRI-related datatypes from BIDS schema."""
         try:
-            # Get MRI datatypes from BIDS schema
-            mri_datatypes = self.bids_schema.bids_schema["rules"]["modalities"]["mri"]["datatypes"]
-            if isinstance(mri_datatypes, list):
+            # Get MRI datatypes directly from schema rules
+            rules = self.bids_schema.bids_schema.get("rules", {})
+            modalities = rules.get("modalities", {})
+
+            if hasattr(modalities, "mri") and hasattr(modalities.mri, "datatypes"):
+                mri_datatypes = modalities.mri.datatypes
+                logger.debug("Found MRI datatypes from schema: %s", mri_datatypes)
                 return mri_datatypes
             else:
-                logger.warning("MRI datatypes not found in schema, using fallback")
+                logger.warning("MRI datatypes not found in schema rules, using fallback")
                 return ["anat", "func", "fmap", "dwi", "perf"]
-        except (KeyError, TypeError) as e:
-            logger.warning("Could not extract MRI modalities from schema: %s, using fallback", e)
+
+        except (KeyError, TypeError, AttributeError) as e:
+            logger.warning("Could not extract MRI datatypes from schema: %s, using fallback", e)
             return ["anat", "func", "fmap", "dwi", "perf"]
 
     def _prepare_bids_context(self, additional_context: str | None = None) -> str:
@@ -117,16 +122,42 @@ class LLMBIDSMapper:
         # Get BIDS schema information
         schema_info = self.bids_schema.get_schema_version_info()
 
-        # Get MRI-specific modalities dynamically from schema
-        mri_modality_list = self._get_mri_modalities()
-        mri_modalities = {}
-        for modality_name, modality_info in self.bids_schema.modalities.items():
-            if modality_name in mri_modality_list:
-                mri_modalities[modality_name] = {
-                    "name": modality_info.get("name", ""),
-                    "description": modality_info.get("description", ""),
-                    "suffixes": list(modality_info.get("suffixes", {}).keys()),
-                }
+        # Get MRI-specific datatypes and their suffixes from schema
+        mri_datatype_list = self._get_mri_modalities()
+        mri_datatypes_info = {}
+
+        # Get datatypes and files rules from schema
+        datatypes_obj = self.bids_schema.bids_schema.get("objects", {}).get("datatypes", {})
+        files_rules = self.bids_schema.bids_schema.get("rules", {}).get("files", {}).get("raw", {})
+
+        for datatype_name in mri_datatype_list:
+            # Get datatype information
+            datatype_info = None
+            if hasattr(datatypes_obj, datatype_name):
+                datatype_info = getattr(datatypes_obj, datatype_name)
+
+            # Get suffixes for this datatype from files rules
+            datatype_suffixes = []
+            if hasattr(files_rules, datatype_name):
+                datatype_files = getattr(files_rules, datatype_name)
+                # Collect all suffixes from all categories within this datatype
+                if hasattr(datatype_files, "keys"):
+                    for category in datatype_files:
+                        category_obj = getattr(datatype_files, category)
+                        if hasattr(category_obj, "suffixes"):
+                            datatype_suffixes.extend(category_obj.suffixes)
+                    # Remove duplicates and sort
+                    datatype_suffixes = sorted(set(datatype_suffixes))
+
+            mri_datatypes_info[datatype_name] = {
+                "name": getattr(datatype_info, "display_name", datatype_name)
+                if datatype_info and hasattr(datatype_info, "display_name")
+                else datatype_name,
+                "description": getattr(datatype_info, "description", "")
+                if datatype_info and hasattr(datatype_info, "description")
+                else "",
+                "suffixes": datatype_suffixes,
+            }
 
         # Get entity information and order
         entities_info = {}
@@ -143,8 +174,8 @@ class LLMBIDSMapper:
         context = f"""
 BIDS Schema (v{schema_info.get("version", "unknown")}):
 
-MRI MODALITIES AND SUFFIXES:
-{json.dumps(mri_modalities, indent=2)}
+MRI DATATYPES AND SUFFIXES:
+{json.dumps(mri_datatypes_info, indent=2)}
 
 ENTITIES (for path construction):
 {json.dumps(entities_info, indent=2)}
@@ -152,15 +183,15 @@ ENTITIES (for path construction):
 ENTITY ORDER (for path construction):
 {json.dumps(entity_order, indent=2)}
 
-TASK: Map DICOM series groups to appropriate BIDS modality, suffix, and entities.
+TASK: Map DICOM series groups to appropriate BIDS datatype, suffix, and entities.
 
 CONSTRAINTS:
-- Only use MRI-related modalities: {", ".join(mri_modality_list)}
-- Use only suffixes that exist in the BIDS schema
+- Only use MRI-related datatypes: {", ".join(mri_datatype_list)}
+- Use only suffixes that exist in the BIDS schema for each datatype
 - Assign entities based on DICOM information when possible
 - Follow entity order when constructing BIDS paths
 - Generate confidence score (0.0-1.0) for each mapping
-- Create BIDS path template: modality/sub-{{subject}}_ses-{{session}}_[entities]_suffix
+- Create BIDS path template: datatype/sub-{{subject}}_ses-{{session}}_[entities]_suffix
 
 EXAMPLE OUTPUT FORMAT:
 {{
@@ -228,7 +259,7 @@ EXAMPLE OUTPUT FORMAT:
             return []
 
         # Create prompt for LLM
-        mri_modality_list = self._get_mri_modalities()
+        mri_datatype_list = self._get_mri_modalities()
         prompt = f"""
 {bids_context}
 
@@ -241,8 +272,8 @@ IMPORTANT: You must return ONLY a valid JSON array with one mapping per group, i
 as the input groups. Do not include any Python code, explanations, or markdown formatting.
 
 Each mapping object in the array should include:
-- bids_modality: one of {mri_modality_list}
-- bids_suffix: appropriate suffix from BIDS schema
+- bids_modality: one of {mri_datatype_list} (use the datatype name like "anat", "func", etc.)
+- bids_suffix: appropriate suffix from BIDS schema (use only suffixes valid for the datatype)
 - bids_entities: dictionary of entities (e.g., {{"acq": "value", "task": "value"}})
 - bids_confidence: confidence score (0.0-1.0)
 - bids_path: full BIDS path template
