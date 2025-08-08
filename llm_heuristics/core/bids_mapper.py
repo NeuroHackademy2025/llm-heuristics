@@ -136,7 +136,7 @@ class LLMBIDSMapper:
         entity_order = self.bids_schema.get_entity_order()
 
         context = f"""
-BIDS Schema Information (v{schema_info.get("version", "unknown")}):
+BIDS Schema (v{schema_info.get("version", "unknown")}):
 
 MRI MODALITIES AND SUFFIXES:
 {json.dumps(mri_modalities, indent=2)}
@@ -196,7 +196,7 @@ EXAMPLE OUTPUT FORMAT:
         prompt = f"""
 {bids_context}
 
-DICOM SERIES GROUPS TO MAP:
+Groups to map (JSON):
 {json.dumps(batch_data, indent=2)}
 
 Please map each group to BIDS format. Return a JSON array with one mapping per group,
@@ -214,7 +214,7 @@ Return only the JSON array, no additional text.
 
         try:
             # Get LLM response
-            response = self.llm_model._call_model(prompt)
+            response = self.llm_model.complete(prompt)
 
             # Parse JSON response
             mappings = json.loads(response.strip())

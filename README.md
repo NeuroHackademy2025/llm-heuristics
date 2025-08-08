@@ -63,7 +63,7 @@ apptainer build llm-heuristics_0-1-0.sif docker://tientong/llm-heuristics:0.1.0
 
 ## Workflow
 
-The workflow now includes separate grouping and mapping steps for better understanding and control:
+The workflow includes main steps for DICOM-to-BIDS conversion:
 
 1. **Analyze your dataset**:
 
@@ -83,37 +83,36 @@ The workflow now includes separate grouping and mapping steps for better underst
 
    This creates in `/path/to/output/`:
    - `.heudiconv/` folder with HeuDiConv output files
-   - `aggregated_dicominfo.tsv` file with aggregated dicom metadata across all sequences
+   - `aggregated_dicominfo.tsv` file with aggregated DICOM metadata across all sequences and subjects
 
-2. **Group sequences** (groups similar sequences together):
+2. **Group sequences** (pandas groupby operations):
    ```bash
    llm-heuristics group /path/to/output
 
-   # apptainer
-   apptainer run --nv \
+   # apptainer (no GPU or models needed for grouping)
+   apptainer run \
     -B /path/to/output:/output \
-    -B /path/to/models:/home/llmuser/models \
     llm-heuristics_0-1-0.sif group /output
    ```
    This creates:
-   - `aggregated_dicominfo_groups.tsv` - Grouped sequences data
-   - `grouping_report.txt` - Grouping summary
+   - `aggregated_dicominfo_groups.tsv` - Grouped sequences data with representative examples
+   - `grouping_report.txt` - Detailed grouping summary and statistics
    
-3. **Map to BIDS** (LLM-powered based):
+3. **Map to BIDS** (LLM-based BIDS schema integration):
    ```bash
-   llm-heuristics map /path/to/output
+   llm-heuristics map-bids /path/to/output
 
    # apptainer
    apptainer run --nv \
     -B /path/to/output:/output \
     -B /path/to/models:/home/llmuser/models \
-    llm-heuristics_0-1-0.sif map /output
+    llm-heuristics_0-1-0.sif map-bids /output
    ```
    This creates:
-   - `aggregated_dicominfo_mapped.tsv` - Groups mapped to BIDS
-   - `mapping_report.txt` - BIDS mapping summary
+   - `aggregated_dicominfo_mapped.tsv` - Groups mapped to specific BIDS patterns with confidence scores
+   - `mapping_report.txt` - Detailed BIDS mapping summary and validation results
    
-4. **Generate a heuristic file** (uses mapped data from step 3):
+4. **Generate a heuristic file** (uses heudiconv's convertall.py structure with mapped data):
    ```bash
    llm-heuristics generate /path/to/output -o heuristic.py
 
@@ -150,7 +149,7 @@ llm-heuristics generate /output/dir -o heuristic.py \
 
 ## Models
 
-LLM-Heuristics uses Llama 3.1 models for heuristic generation. The `--model` parameter accepts any **HuggingFace model name** that is compatible with the Llama architecture.
+LLM-Heuristics uses Llama 3.1 models for BIDS mapping and heuristic generation. The `--model` parameter accepts any **HuggingFace model name** that is compatible with the Llama architecture. All models run locally on your machine.
 
 You can use any **Llama 3.1 model** from HuggingFace, including:
 
@@ -170,12 +169,12 @@ You can use any **Llama 3.1 model** from HuggingFace, including:
 ### **Usage Examples**
 
 ```bash
-# Use 8B model for lower resource usage
-llm-heuristics map /path/to/output \
-    --model "meta-llama/Meta-Llama-3.1-8B-Instruct" \
-    --output heuristic.py
+# Use 8B model for BIDS mapping
+llm-heuristics map-bids /path/to/output \
+    --model "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
-llm-heuristics map /path/to/output \
+# Use higher precision (requires more GPU memory)
+llm-heuristics map-bids /path/to/output \
     --model "meta-llama/Meta-Llama-3.1-8B-Instruct" \
     --no-quantization
 ```
@@ -288,7 +287,7 @@ Note: This software uses Large Language Models that are subject to separate lice
 
 - [HeuDiConv](https://heudiconv.readthedocs.io/) team for the DICOM-BIDS conversion tool
 - [Meta](https://ai.meta.com/) for the Llama models
-- [Hugging Face](https://huggingface.co/) for the Transformers library
+- [Hugging Face](https://huggingface.co/) for the Transformers library and model hosting
 
 ## Support
 

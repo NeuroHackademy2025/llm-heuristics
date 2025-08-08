@@ -60,12 +60,12 @@ def main(verbose: int, quiet: bool) -> None:
 @click.option(
     "--no-quantization", is_flag=True, help="Disable model quantization (requires more memory)"
 )
-@click.option("--context", help="Additional context or requirements for heuristic generation")
 @click.option(
-    "--max-iterations",
-    type=int,
-    default=5,
-    help="Maximum number of regeneration attempts for BIDS compliance (default: 5)",
+    "--context",
+    help=(
+        "Custom context for sequence selection "
+        "(e.g., 'for func only use motion_corrected, for T1w only use Norm sequence')"
+    ),
 )
 def generate(
     output_dir: Path,
@@ -73,32 +73,21 @@ def generate(
     model: str,
     no_quantization: bool,
     context: str | None,
-    max_iterations: int,
 ) -> None:
-    """Generate heuristic file for heudiconv from grouped DICOM data.
+    """Generate heuristic file for heudiconv from mapped DICOM data.
 
-    This command requires that 'group' has been run first. It reads the
-    aggregated_dicominfo_groups.tsv file from the group output directory and uses
-    LLM to generate the heuristic file with automatic BIDS validation.
+    This command requires that 'map-bids' has been run first. It reads the
+    aggregated_dicominfo_mapped.tsv file and generates a heuristic file using
+    LLM to fill in the heudiconv skeleton with proper sequence logic.
 
-    If the generated heuristic contains BIDS compliance issues, it will
-    automatically regenerate improved versions until all paths are compliant
-    or max iterations are reached. Files are saved as:
-    - heuristic_v0.py (first attempt)
-    - heuristic_v1.py (first regeneration)
-    - heuristic_v2.py (second regeneration)
-    - etc.
-
-    OUTPUT_DIR: Directory containing group results (with aggregated_dicominfo_groups.tsv)
+    OUTPUT_DIR: Directory containing mapped results (with aggregated_dicominfo_mapped.tsv)
 
     Privacy Note: All LLM processing happens locally on your machine.
     No data is sent to external services or shared with third parties.
     """
 
-    console.print(f"[bold green]Generating heuristic from grouped data:[/bold green] {output_dir}")
-    console.print(
-        "[dim]Privacy Note: All processing happens locally - no data leaves your system[/dim]"
-    )
+    console.print(f"[bold green]Generating heuristic from mapped data:[/bold green] {output_dir}")
+    console.print("[dim]Privacy Note: All LLM processing happens locally[/dim]")
 
     # Check for required aggregated_dicominfo_mapped.tsv file
     mapped_dicominfo_path = output_dir / "aggregated_dicominfo_mapped.tsv"
@@ -106,8 +95,8 @@ def generate(
         console.print(
             f"[bold red]Error:[/bold red] Required file not found: {mapped_dicominfo_path}"
         )
-        console.print("[yellow]Please run 'map' command first:[/yellow]")
-        console.print(f"[dim]llm-heuristics map {output_dir}[/dim]")
+        console.print("[yellow]Please run 'map-bids' command first:[/yellow]")
+        console.print(f"[dim]llm-heuristics map-bids {output_dir}[/dim]")
         raise click.ClickException("Missing required aggregated_dicominfo_mapped.tsv file")
 
     if output is None:
@@ -115,72 +104,27 @@ def generate(
 
     console.print(f"[bold blue]Model:[/bold blue] {model}")
     console.print(f"[bold blue]Using mapped data from:[/bold blue] {mapped_dicominfo_path}")
+    if context:
+        console.print(f"[bold blue]Custom context:[/bold blue] {context}")
 
     try:
-        # Initialize BIDS schema for enhanced context
-        with console.status("Loading BIDS schema for enhanced generation..."):
-            bids_schema = BIDSSchemaIntegration()
-
-        # Prepare BIDS context from schema
-        schema_info = bids_schema.get_schema_version_info()
-        available_modalities = list(bids_schema.modalities.keys())
-
-        # Create modalities list
-        modality_list = ", ".join(available_modalities)
-
-        bids_context = f"""
-BIDS Schema Context (v{schema_info.get("version", "unknown")}):
-- Available modalities: {modality_list}
-- Ensure generated paths follow BIDS specification
-- Use standard BIDS entities: sub-, ses-, task-, acq-, run-, echo-, etc.
-"""
-
-        # Combine user context with BIDS context
-        full_context = bids_context
-        if context:
-            full_context += f"\n\nUser-specified context:\n{context}"
-
-        # Initialize generator
+        # Initialize generator with LLM model
         with console.status("Initializing LLM model..."):
             generator = HeuristicGenerator(
                 model_name=model,
                 use_quantization=not no_quantization,
             )
 
-        # Iterative generation with automatic BIDS validation and regeneration
-        console.print("[bold blue]Starting iterative BIDS-compliant generation...[/bold blue]")
-        console.print(f"[dim]Max iterations: {max_iterations}[/dim]")
+        # Generate heuristic using LLM to create sequence logic
+        with console.status("Generating heuristic with LLM..."):
+            heuristic_content = generator.generate_from_mapped_tsv(
+                mapped_dicominfo_path=mapped_dicominfo_path,
+                output_file=output,
+                custom_context=context,
+            )
 
-        heuristic_content, final_output_path, iterations_used = _iterative_heuristic_generation(
-            generator=generator,
-            mapped_dicominfo_path=mapped_dicominfo_path,
-            base_output=output,
-            full_context=full_context,
-            bids_schema=bids_schema,
-            max_iterations=max_iterations,
-        )
-
-        console.print("\n[bold green] Final heuristic generated![/bold green]")
-        console.print(f"[bold blue]Final output file:[/bold blue] {final_output_path}")
-        iterations_text = f"{iterations_used}/{max_iterations}"
-        console.print(f"[bold blue]Iterations used:[/bold blue] {iterations_text}")
-
-        # Final validation summary
-        from llm_heuristics.utils.templates import HeuristicTemplate
-
-        template = HeuristicTemplate()
-        final_validation = template.validate_generated_heuristic_paths(heuristic_content)
-
-        if final_validation.get("overall_valid", False):
-            console.print("[bold green] Final heuristic is fully BIDS compliant![/bold green]")
-        else:
-            console.print("[bold yellow] Final heuristic has some remaining issues[/bold yellow]")
-
-        valid_count = len(final_validation.get("valid_paths", []))
-        invalid_count = len(final_validation.get("invalid_paths", []))
-        console.print(f"[dim]BIDS-compliant paths: {valid_count}[/dim]")
-        if invalid_count > 0:
-            console.print(f"[yellow]Paths still needing review: {invalid_count}[/yellow]")
+        console.print("\n[bold green]Heuristic generated successfully![/bold green]")
+        console.print(f"[bold blue]Output file:[/bold blue] {output}")
 
         # Show preview
         if len(heuristic_content) > 1000:
@@ -270,10 +214,8 @@ def analyze(
 
             # Run HeuDiConv analysis and save results to output directory
             with console.status("Running HeuDiConv DICOM analysis..."):
-                dicom_df, report_content = generator.analyze_and_save_dicom_info(
-                    dicom_dir=dicom_dir,
-                    output_file=None,
-                )
+                dicom_df = generator.dicom_extractor.extract_dicom_info(dicom_dir=dicom_dir)
+                report_content = generator.dicom_extractor.generate_summary(dicom_df)
 
             console.print("[bold green] HeuDiConv analysis completed![/bold green]")
 
@@ -695,124 +637,6 @@ def clear_cache(cache_dir: Path | None) -> None:
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise click.ClickException(str(e)) from e
-
-
-def _get_versioned_filename(base_output: Path, version: int) -> Path:
-    """Generate versioned filename for iterative heuristic generation.
-
-    Parameters
-    ----------
-    base_output : Path
-        Original output file path
-    version : int
-        Version number (0 for original, 1+ for iterations)
-
-    Returns
-    -------
-    Path
-        Versioned filename
-    """
-    if version == 0:
-        # Original file gets _v0 suffix
-        stem = base_output.stem
-        suffix = base_output.suffix
-        return base_output.parent / f"{stem}_v0{suffix}"
-    else:
-        # Iterations get _v1, _v2, etc.
-        stem = base_output.stem
-        suffix = base_output.suffix
-        return base_output.parent / f"{stem}_v{version}{suffix}"
-
-
-def _iterative_heuristic_generation(
-    generator,
-    mapped_dicominfo_path: Path,
-    base_output: Path,
-    full_context: str,
-    bids_schema,
-    max_iterations: int = 10,
-) -> tuple[str, Path, int]:
-    """Generate heuristic with iterative BIDS validation and regeneration.
-
-    Parameters
-    ----------
-    generator : HeuristicGenerator
-        Initialized heuristic generator
-    mapped_dicominfo_path : Path
-        Path to mapped DICOM info file (aggregated_dicominfo_mapped.tsv)
-    base_output : Path
-        Base output filename
-    full_context : str
-        Full context for LLM generation
-    bids_schema : BIDSSchemaIntegration
-        BIDS schema instance
-    max_iterations : int
-        Maximum number of regeneration attempts
-
-    Returns
-    -------
-    tuple[str, Path, int]
-        Final heuristic content, output path, and iteration count
-    """
-    from llm_heuristics.utils.templates import HeuristicTemplate
-
-    template = HeuristicTemplate()
-
-    for iteration in range(max_iterations):
-        # Determine output filename
-        output_path = _get_versioned_filename(base_output, iteration)
-
-        attempt_text = f"Generation attempt {iteration + 1}/{max_iterations}"
-        console.print(f"\n[bold blue]{attempt_text}[/bold blue]")
-
-        # Add iteration-specific context for regeneration
-        iteration_context = full_context
-        if iteration > 0:
-            iteration_context += f"\n\nIMPORTANT: This is regeneration attempt #{iteration + 1}."
-            iteration_context += "\nThe previous heuristic had BIDS compliance issues."
-            iteration_context += "\nPlease fix the path templates to be fully BIDS compliant."
-            iteration_context += "\nEnsure all create_key() paths follow BIDS specification."
-
-        # Generate heuristic
-        with console.status(f"Generating heuristic (attempt {iteration + 1})..."):
-            heuristic_content = generator.generate_from_mapped_tsv(
-                mapped_dicominfo_path=mapped_dicominfo_path,
-                output_file=output_path,
-                additional_context=iteration_context,
-            )
-
-        console.print(f"[green]Generated:[/green] {output_path}")
-
-        # Validate the generated heuristic
-        with console.status(f"Validating heuristic (attempt {iteration + 1})..."):
-            validation_results = template.validate_generated_heuristic_paths(heuristic_content)
-
-        # Check if validation passed
-        if validation_results.get("overall_valid", False):
-            success_text = f" Validation successful on attempt {iteration + 1}!"
-            console.print(f"[bold green]{success_text}[/bold green]")
-            return heuristic_content, output_path, iteration + 1
-
-        # Show validation issues
-        invalid_count = len(validation_results.get("invalid_paths", []))
-        console.print(f"[yellow] Validation failed: {invalid_count} invalid paths[/yellow]")
-
-        # Show first few issues for debugging
-        for i, path_info in enumerate(validation_results.get("invalid_paths", [])[:2]):
-            console.print(f"   {path_info['template']}")
-            if path_info.get("errors") and i == 0:
-                for error in path_info["errors"][:1]:
-                    console.print(f"    - {error}")
-
-        if iteration < max_iterations - 1:
-            console.print("[dim]Attempting regeneration...[/dim]")
-        else:
-            console.print(f"[bold red]Max iterations ({max_iterations}) reached.[/bold red]")
-
-    # If we get here, all iterations failed
-    output_path = _get_versioned_filename(base_output, max_iterations - 1)
-    console.print(f"[bold yellow] Returning best attempt from {output_path}[/bold yellow]")
-    return heuristic_content, output_path, max_iterations
 
 
 def _aggregate_dicominfo_files(heudiconv_dir: Path) -> pd.DataFrame:

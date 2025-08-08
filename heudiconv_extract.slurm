@@ -24,7 +24,7 @@ SESSION=$(echo $LINE | cut -f3)
 echo "Task ${SLURM_ARRAY_TASK_ID}: Processing subject=$SUBJECT, session=$SESSION"
 
 # Prepare HeuDiConv command
-DICOM_DIR="/private/var/folders/wt/24zz644935nd5vsgbdhtnv140000gp/T/pytest-of-tientong/pytest-7/test_extract_dicom_info_slurm_0/empty"
+DICOM_DIR="/private/var/folders/wt/24zz644935nd5vsgbdhtnv140000gp/T/pytest-of-tientong/pytest-12/test_extract_dicom_info_slurm_0/empty"
 OUTPUT_DIR="/Users/tientong/projects/llm-heuristics/heudiconv_output"
 HEUDICONV_BIN="heudiconv"
 

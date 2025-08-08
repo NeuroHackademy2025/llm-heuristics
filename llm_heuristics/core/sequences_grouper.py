@@ -156,7 +156,7 @@ class SequencesGrouper:
                 "",
                 "Next Steps:",
                 "-----------",
-                "1. Run 'llm-heuristics map <output_dir>' to map groups to BIDS",
+                "1. Run 'llm-heuristics map-bids <output_dir>' to map groups to BIDS",
                 "2. Run 'llm-heuristics generate <output_dir>' to create heuristics",
                 "",
                 "Note: Groups are ready for BIDS mapping using LLM analysis.",

@@ -34,17 +34,17 @@ class HeuristicTemplate:
 
     def create_heuristic_prompt(
         self,
-        series_info: list[dict[str, Any]],
+        sequences_info: list[dict[str, Any]],
         study_info: dict[str, str],
         additional_context: str | None = None,
     ) -> str:
         """
-        Create a prompt for LLM heuristic generation.
+        Create a prompt for LLM heuristic generation using mapped BIDS data.
 
         Parameters
         ----------
-        series_info : list[dict[str, Any]]
-            Information about each DICOM series
+        sequences_info : list[dict[str, Any]]
+            Mapped BIDS information for each series group
         study_info : dict[str, str]
             Study-level information
         additional_context : str | None
@@ -55,22 +55,18 @@ class HeuristicTemplate:
         str
             Formatted prompt for the LLM
         """
-        # Enhance series info with BIDS schema classifications
-        enhanced_series_info = self._enhance_series_with_bids_schema(series_info)
-
         return self.prompt_template.render(
-            series_info=enhanced_series_info,
+            sequences_info=sequences_info,
             study_info=study_info,
             additional_context=additional_context or "",
-            num_series=len(series_info),
-            bids_entities=self._get_bids_entities_info() if self.bids_schema else {},
-            bids_modalities=self._get_bids_modalities_info() if self.bids_schema else {},
+            num_series=len(sequences_info),
         )
 
     def generate_heuristic_skeleton(
         self,
         series_mappings: dict[str, str],
         study_info: dict[str, str],
+        custom_context: str | None = None,
     ) -> str:
         """
         Generate a heuristic file skeleton.
@@ -81,6 +77,8 @@ class HeuristicTemplate:
             Mapping of series identifiers to BIDS patterns
         study_info : dict[str, str]
             Study information
+        custom_context : str | None
+            Custom context for sequence selection rules
 
         Returns
         -------
@@ -90,6 +88,7 @@ class HeuristicTemplate:
         return self.base_template.render(
             series_mappings=series_mappings,
             study_info=study_info,
+            custom_context=custom_context or "",
         )
 
     def get_create_key_function(self) -> str:
@@ -113,162 +112,203 @@ class HeuristicTemplate:
         return self._load_heudiconv_template()
 
     def _load_heudiconv_template(self) -> str:
-        """Load heudiconv's convertall.py template and customize it for our use.
+        """Return the heuristic skeleton dynamically from heudiconv's convertall.py.
 
-        This method requires heudiconv to be installed and will not provide any fallback.
+        This template extracts the actual source code from heudiconv's convertall.py
+        and modifies it using Jinja templating, ensuring full compatibility with
+        heudiconv standards while allowing customization.
 
         Raises
         ------
         ImportError
             If heudiconv is not installed
         RuntimeError
-            If template extraction fails
+            If convertall.py source cannot be extracted
         """
         try:
             import inspect
 
-            import heudiconv.heuristics.convertall as convertall
+            import heudiconv.heuristics.convertall
+        except ImportError as e:
+            raise ImportError(f"heudiconv is required but not installed: {e}") from e
 
-            # Get the source code of the convertall module
-            source = inspect.getsource(convertall)
+        try:
+            # Get the actual source code from heudiconv's convertall.py
+            convertall_source = inspect.getsource(heudiconv.heuristics.convertall)
+        except Exception as e:
+            raise RuntimeError(f"Failed to extract convertall.py source: {e}") from e
 
-            # Create our customized template based on the heudiconv source
-            template = f'''"""
+        # Extract header (everything before infotodict function)
+        lines = convertall_source.split("\n")
+        infotodict_start = None
+        for i, line in enumerate(lines):
+            if line.strip().startswith("def infotodict("):
+                infotodict_start = i
+                break
+
+        if infotodict_start is None:
+            raise RuntimeError("Could not find infotodict function in convertall.py")
+
+        # Header includes everything up to infotodict
+        header_lines = lines[:infotodict_start]
+        convertall_source_header = "\n".join(header_lines).strip()
+
+        # Extract SeqInfo documentation from original infotodict docstring
+        seqinfo_doc_lines = []
+        in_seqinfo_doc = False
+        for line in lines[infotodict_start:]:
+            if "The namedtuple `s` contains the following fields:" in line:
+                in_seqinfo_doc = True
+                seqinfo_doc_lines.append(line.strip())
+                continue
+            if in_seqinfo_doc:
+                if line.strip().startswith("*") or line.strip().startswith("-"):
+                    seqinfo_doc_lines.append(line.strip())
+                elif line.strip() == '"""' or (line.strip() and not line.strip().startswith("*")):
+                    break
+
+        seqinfo_documentation = (
+            "\n    ".join(seqinfo_doc_lines)
+            if seqinfo_doc_lines
+            else "See heudiconv documentation for SeqInfo fields."
+        )
+
+        # Create a Jinja template that modifies the convertall source with placeholders
+        template = f'''"""
 Heuristic file generated automatically by llm-heuristics
 
-This file is based on heudiconv's convertall.py template and follows
-the standard heudiconv format for maximum compatibility.
+Based on heudiconv's convertall.py with modifications for BIDS mapping.
+Generated from BIDS mapped groups: {{{{ study_info.dicom_dir }}}}
+Total mapped groups: {{{{ study_info.num_unique_groups }}}}
+{{% if custom_context -%}}
 
-Based on DICOM analysis from: {{{{ study_info.dicom_dir }}}}
-Number of series analyzed: {{{{ study_info.num_series }}}}
+Custom sequence selection rules:
+{{{{ custom_context }}}}
+{{% endif %}}
+
+Original convertall.py structure preserved with the following modifications:
+- infotodict() function customized with BIDS key mappings
+- Logic added for sequence-specific BIDS assignment
 """
 
-{source}
+{convertall_source_header}
 
-# Override the default infotodict function with our custom logic
 def infotodict(
     seqinfo: list[SeqInfo],
 ) -> dict[tuple[str, tuple[str, ...], None], list[str]]:
-    """Heuristic evaluator for determining which runs belong where
+    """Heuristic evaluator for determining which runs belong where.
 
-    This function follows the heudiconv standard format and uses
-    the same function signature as heudiconv.heuristics.convertall.
+    This function follows the heudiconv standard interface and uses the
+    SeqInfo namedtuple structure. Customized for BIDS mapping based on
+    sequence grouping and mapping analysis.
+    {{% if custom_context -%}}
 
-    The namedtuple `s` contains the standard SeqInfo fields from heudiconv.
+    Custom rules applied:
+    {{{{ custom_context }}}}
+    {{% endif %}}
+
+    Parameters
+    ----------
+    seqinfo : list[SeqInfo]
+        List of SeqInfo namedtuples containing DICOM metadata for each series.
+
+    Returns
+    -------
+    dict[tuple[str, tuple[str, ...], None], list[str]]
+        Dictionary mapping BIDS keys to lists of series IDs.
+
+    Notes
+    -----
+    {seqinfo_documentation}
     """
 
-    # Define BIDS key templates for each sequence type
+    # Define BIDS key templates for each mapped group
     {{% for key, pattern in series_mappings.items() -%}}
     {{{{ key }}}} = create_key('{{{{ pattern }}}}')
     {{% endfor %}}
 
     # Initialize info dictionary following heudiconv standard
     info: dict[tuple[str, tuple[str, ...], None], list[str]] = {{
-        {{%- for key in series_mappings.keys() %}}
+        {{% for key in series_mappings.keys() -%}}
         {{{{ key }}}}: [],
-        {{%- endfor %}}
+        {{% endfor %}}
     }}
 
-    # Process each DICOM series using heudiconv's SeqInfo structure
+    # Iterate over sequences in the study and apply mapping logic
     for s in seqinfo:
-        # Map sequences to BIDS based on DICOM metadata
-        # Logic generated by LLM analysis of your DICOM data
+        # TODO: Fill in mapping logic using sequence attributes from `s`
+        # Standard SeqInfo attributes available:
+        # s.series_id, s.protocol_name, s.series_description, s.dim1-4,
+        # s.TR, s.TE, s.is_motion_corrected, s.series_files, etc.
 
-        {{% for key, pattern in series_mappings.items() -%}}
-        # Add sequence identification logic for {{{{ key }}}}
-        # Example: if conditions_for_{{{{ key }}}}:
-        #     info[{{{{ key }}}}].append(s.series_id)
-        {{% endfor %}}
+        {{% if custom_context -%}}
+        # Apply custom sequence selection rules as specified above
+        {{% endif %}}
+
+        # Example mapping logic (customize based on your mapped groups):
+        # if "T1w" in s.series_description.upper():
+        #     info[anat_T1w].append(s.series_id)
+        # elif "bold" in s.series_description.lower():
+        #     info[func_task_rest_bold].append(s.series_id)
+
+        pass  # Remove this pass statement and add your mapping logic
 
     return info
 '''
-            return template
 
-        except ImportError as e:
-            # heudiconv is required - no fallback
-            raise ImportError(f"heudiconv is required but not installed: {e}") from e
-        except Exception as e:
-            # Source inspection failed - this is also an error since heudiconv is required
-            raise RuntimeError(f"Failed to extract template from heudiconv: {e}") from e
+        return template
 
     def _get_prompt_template(self) -> str:
-        """Get the LLM prompt template."""
-        return """You are an expert neuroimaging researcher who helps create heudiconv
+        """Get the LLM prompt template for mapped BIDS data."""
+        return """You are an expert neuroimaging researcher who creates heudiconv
 heuristic files for converting DICOM data to BIDS format.
 
-IMPORTANT: The template below is based on the actual heudiconv.heuristics.convertall module.
-Generate a complete heuristic file by filling in the infotodict function with sequence logic.
-
-I need you to generate a complete, working heuristic file based on the following DICOM analysis:
+We already ran a mapping step that grouped DICOM series and assigned BIDS
+modalities, suffixes, and entities. Use ONLY the mapped output below to
+produce a concise and correct heuristic that follows heudiconv conventions.
 
 STUDY INFORMATION:
 - DICOM Directory: {{ study_info.dicom_dir }}
-- Total Series: {{ num_series }}
+- Total Mapped Groups: {{ study_info.num_unique_groups }}
 
-DICOM SERIES ANALYSIS:
-{% for series in series_info -%}
-Series {{ series.series_number }}:
-  - Description: {{ series.description }}
-  - Protocol: {{ series.protocol }}
-  - Modality: {{ series.modality }}
-  - Dimensions: {{ series.dimensions }}
-  - Files: {{ series.num_files }}
-  - Scanning Sequence: {{ series.sequence }}
-  - Sequence Variant: {{ series.variant }}
-  - TR: {{ series.tr }} ms
-  - TE: {{ series.te }} ms
-  - Data Type: {{ "Derived" if series.is_derived else "Raw" }}
-{% if series.bids_modality -%}
-  - BIDS Suggestion: {{ series.bids_modality }}/{{ series.bids_suffix }}
-    (confidence: {{ "%.1f"|format(series.bids_confidence) }})
-  - Suggested Path: {{ series.suggested_bids_path }}
-{% if series.bids_entities -%}
-  - Suggested Entities: {{ series.bids_entities }}
-{% endif -%}
-{% endif -%}
+MAPPED BIDS ASSIGNMENTS:
+{% for group in sequences_info -%}
+Group {{ loop.index }}:
+  - BIDS Path: {{ group.bids_path }}
+  - Modality: {{ group.bids_modality }}
+  - Suffix: {{ group.bids_suffix }}
+  - Entities: {{ group.bids_entities }}
+  - Series Count: {{ group.series_count }}
+  - Protocol: {{ group.protocol_name }}
+  - Description: {{ group.series_description }}
+  - Sequence: {{ group.sequence_name }}
+  - Dimensions: {{ group.dim1 }}x{{ group.dim2 }}x{{ group.dim3 }}x{{ group.dim4 }}
+  - TR: {{ group.TR }} ms
+  - Motion Corrected: {{ group.is_motion_corrected }}
 
 {% endfor %}
-
-{% if bids_modalities -%}
-BIDS SCHEMA REFERENCE:
-Valid BIDS Modalities:
-{% for modality, info in bids_modalities.items() -%}
-  - {{ modality }}: {{ info.description }}
-{% endfor %}
-
-{% endif -%}
-{% if bids_entities -%}
-Valid BIDS Entities:
-{% for entity, info in bids_entities.items() -%}
-  - {{ entity }} ({{ info.entity }}): {{ info.description }}
-{% endfor %}
-
-{% endif -%}
 
 {% if additional_context -%}
-ADDITIONAL REQUIREMENTS:
+CUSTOM CONTEXT:
 {{ additional_context }}
 {% endif %}
 
-Please generate a complete heuristic.py file:
+Please generate a complete heuristic.py file that:
 
-1. USE THE TEMPLATE STRUCTURE ABOVE (which comes from heudiconv.heuristics.convertall)
-2. Fill in the infotodict function with proper sequence identification logic
-3. Use the standard SeqInfo fields available in the template comments
-4. Map each DICOM series to appropriate BIDS naming
+1. Imports create_key from heudiconv.utils
+2. Defines the infotodict function following heudiconv standards
+3. Creates BIDS keys for each mapped group using the exact paths above
+4. Implements conditional logic to assign sequences to the correct BIDS keys
+5. Uses standard heudiconv SeqInfo fields (s.protocol_name, s.series_description, etc.)
+6. Applies the custom context rules if provided
 
-IMPORTANT HEUDICONV GUIDELINES:
-- The template already includes the correct heudiconv imports and functions
-- Reference SeqInfo fields correctly (s.protocol_name, s.series_description, etc.)
-- Use BIDS-compliant naming conventions
-- Be specific in sequence identification to avoid misclassification
-- Consider anatomical (anat), functional (func), diffusion (dwi),
-  fieldmap (fmap), and perfusion (perf) data types
-- For functional data, include task names (e.g., task-rest, task-[taskname])
-- Use acquisition labels (acq-) when needed to distinguish similar sequences
-- Include run numbers (run-) for repeated sequences
+Important:
+- Use the exact BIDS paths provided in the mappings
+- Make sure the logic correctly identified each sequence type
+- Follow heudiconv conventions for the infotodict function
+- Be specific in your conditions to avoid misclassification
 
-Generate the complete Python heuristic file by customizing the template above:"""
+Generate the complete Python heuristic file:"""
 
     def get_common_bids_patterns(self) -> dict[str, str]:
         """Get ALL BIDS naming patterns directly from schema rules (no hardcoding)."""
@@ -407,96 +447,3 @@ Generate the complete Python heuristic file by customizing the template above:""
         # Cache for future use
         self._all_schema_patterns_cache = patterns
         return patterns
-
-    def _enhance_series_with_bids_schema(
-        self, series_info: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        """
-        Enhance series information with BIDS schema classifications.
-
-        Parameters
-        ----------
-        series_info : list[dict[str, Any]]
-            Original series information
-
-        Returns
-        -------
-        list[dict[str, Any]]
-            Enhanced series information with BIDS suggestions
-        """
-        if not self.bids_schema:
-            return series_info
-
-        enhanced_series = []
-        for series in series_info:
-            enhanced = series.copy()
-
-            try:
-                # Get dimensions tuple
-                dimensions = series.get("dimensions", "1x1x1x1").split("x")
-                dimensions = tuple(int(d) for d in dimensions if d.isdigit())
-                if len(dimensions) < 4:
-                    dimensions = dimensions + (1,) * (4 - len(dimensions))
-
-                # Classify using BIDS schema
-                classification = self.bids_schema.classify_sequence_to_bids(
-                    series_description=series.get("description", ""),
-                    protocol_name=series.get("protocol", ""),
-                    sequence_type=series.get("sequence", ""),
-                    dimensions=dimensions,
-                )
-
-                # Add BIDS suggestions to series info
-                enhanced["bids_modality"] = classification["modality"]
-                enhanced["bids_suffix"] = classification["suffix"]
-                enhanced["bids_entities"] = classification["entities"]
-                enhanced["bids_confidence"] = classification["confidence"]
-
-                # Generate suggested BIDS path
-                enhanced["suggested_bids_path"] = self.bids_schema.generate_bids_path_template(
-                    modality=classification["modality"],
-                    suffix=classification["suffix"],
-                    entities=classification["entities"],
-                    include_session=True,
-                )
-
-            except Exception as e:
-                logger.warning(
-                    "Failed to classify series %s: %s", series.get("series_number", "unknown"), e
-                )
-                # Add schema-driven fallback classifications
-                fallback = self._get_schema_fallback_classification()
-                enhanced.update(fallback)
-
-            enhanced_series.append(enhanced)
-
-        return enhanced_series
-
-    def _get_bids_entities_info(self) -> dict[str, Any]:
-        """Get BIDS entities information for template context."""
-        if not self.bids_schema:
-            return {}
-
-        entities_info = {}
-        for entity_key, entity_data in self.bids_schema.entities.items():
-            entities_info[entity_key] = {
-                "name": entity_data.get("name", entity_key),
-                "description": entity_data.get("description", ""),
-                "entity": entity_data.get("entity", entity_key),
-            }
-
-        return entities_info
-
-    def _get_bids_modalities_info(self) -> dict[str, Any]:
-        """Get BIDS modalities information for template context."""
-        if not self.bids_schema:
-            return {}
-
-        modalities_info = {}
-        for modality_key, modality_data in self.bids_schema.modalities.items():
-            modalities_info[modality_key] = {
-                "name": modality_data.get("name", modality_key),
-                "description": modality_data.get("description", ""),
-            }
-
-        return modalities_info

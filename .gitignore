@@ -60,11 +60,14 @@ venv.bak/
 # Mac
 .DS_Store
 
-# LLM and model cache
-models/
+# LLM model cache files (but not the source code in llm_heuristics/models/)
 *.bin
 *.safetensors
 *.onnx
+# Cache directories for downloaded models
+models/cache/
+models/downloads/
+.cache/huggingface/
 
 # DICOM and medical imaging data
 *.dcm
