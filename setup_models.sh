@@ -32,7 +32,22 @@ echo "Models will be downloaded to: $MODELS_DIR"
 # Download models
 echo ""
 echo "Logging into Hugging Face CLI..."
-hf auth login --token "$HF_TOKEN" --add-to-git-credential
+
+# Prefer new 'hf' CLI if available; fallback to 'huggingface-cli'
+if command -v hf >/dev/null 2>&1; then
+  HF_LOGIN_CMD=(hf auth login --token "$HF_TOKEN")
+  HF_DOWNLOAD_CMD=hf
+else
+  HF_LOGIN_CMD=(huggingface-cli login --token "$HF_TOKEN")
+  HF_DOWNLOAD_CMD=huggingface-cli
+fi
+
+"${HF_LOGIN_CMD[@]}"
+
+# Improve reliability on HPC / slow networks
+export HF_HUB_ENABLE_HF_TRANSFER=1   # Use Rust downloader if available
+export HF_HUB_DISABLE_TELEMETRY=1
+export HF_HUB_ETAG_TIMEOUT=60        # Increase HEAD request timeout from default 10s
 
 echo "Downloading Llama models using Hugging Face CLI..."
 echo "Note: This may download up to ~140GB of model data, depending on selections"
@@ -40,13 +55,50 @@ echo ""
 
 mkdir -p "$MODELS_DIR/models"
 
-huggingface-cli download meta-llama/Meta-Llama-3.1-70B-Instruct \
-  --repo-type model --local-dir "$MODELS_DIR/models/Meta-Llama-3.1-70B-Instruct" \
-  --local-dir-use-symlinks False
+download_with_retry() {
+  local repo_id="$1"
+  local target_dir="$2"
+  local attempts=3
+  local delay=10
 
-huggingface-cli download meta-llama/Meta-Llama-3.1-8B-Instruct \
-  --repo-type model --local-dir "$MODELS_DIR/models/Meta-Llama-3.1-8B-Instruct" \
-  --local-dir-use-symlinks False
+  for i in $(seq 1 $attempts); do
+    echo "Downloading $repo_id (attempt $i/$attempts)..."
+    if [ "$HF_DOWNLOAD_CMD" = "hf" ]; then
+      if hf download "$repo_id" \
+          --repo-type model \
+          --local-dir "$target_dir" \
+          --local-dir-use-symlinks False \
+          --max-workers 4 \
+          --resume-download; then
+        echo "Downloaded $repo_id to $target_dir"
+        return 0
+      fi
+    else
+      if huggingface-cli download "$repo_id" \
+          --repo-type model \
+          --local-dir "$target_dir" \
+          --local-dir-use-symlinks False \
+          --max-workers 4; then
+        echo "Downloaded $repo_id to $target_dir"
+        return 0
+      fi
+    fi
+      echo "Downloaded $repo_id to $target_dir"
+      return 0
+    echo "Download failed for $repo_id. Retrying in ${delay}s..."
+    sleep "$delay"
+    delay=$((delay * 2))
+  done
+
+  echo "Failed to download $repo_id after $attempts attempts." >&2
+  return 1
+}
+
+download_with_retry meta-llama/Meta-Llama-3.1-70B-Instruct \
+  "$MODELS_DIR/models/Meta-Llama-3.1-70B-Instruct"
+
+download_with_retry meta-llama/Meta-Llama-3.1-8B-Instruct \
+  "$MODELS_DIR/models/Meta-Llama-3.1-8B-Instruct"
 
 echo ""
 echo " Models downloaded successfully!"
