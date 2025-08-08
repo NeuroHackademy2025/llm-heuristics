@@ -64,16 +64,14 @@ download_with_retry() {
   for i in $(seq 1 $attempts); do
     echo "Downloading $repo_id (attempt $i/$attempts)..."
     if [ "$HF_DOWNLOAD_CMD" = "hf" ]; then
+      # Newer 'hf' CLI has different argument names
       if hf download "$repo_id" \
-          --repo-type model \
-          --local-dir "$target_dir" \
-          --local-dir-use-symlinks False \
-          --max-workers 4 \
-          --resume-download; then
+          --local-dir "$target_dir"; then
         echo "Downloaded $repo_id to $target_dir"
         return 0
       fi
     else
+      # Legacy 'huggingface-cli' arguments
       if huggingface-cli download "$repo_id" \
           --repo-type model \
           --local-dir "$target_dir" \
@@ -83,8 +81,6 @@ download_with_retry() {
         return 0
       fi
     fi
-      echo "Downloaded $repo_id to $target_dir"
-      return 0
     echo "Download failed for $repo_id. Retrying in ${delay}s..."
     sleep "$delay"
     delay=$((delay * 2))
