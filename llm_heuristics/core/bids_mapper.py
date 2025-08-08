@@ -206,17 +206,30 @@ EXAMPLE OUTPUT FORMAT:
 Groups to map (JSON):
 {json.dumps(batch_data, indent=2)}
 
-Please map each group to BIDS format. Return a JSON array with one mapping per group,
-in the same order as the input groups.
+TASK: Map each group to BIDS schema.
 
-Each mapping should include:
+IMPORTANT: You must return ONLY a valid JSON array with one mapping per group, in the same order
+as the input groups. Do not include any Python code, explanations, or markdown formatting.
+
+Each mapping object in the array should include:
 - bids_modality: one of {mri_modality_list}
 - bids_suffix: appropriate suffix from BIDS schema
 - bids_entities: dictionary of entities (e.g., {{"acq": "value", "task": "value"}})
 - bids_confidence: confidence score (0.0-1.0)
 - bids_path: full BIDS path template
 
-Return only the JSON array, no additional text.
+Example format:
+[
+  {{
+    "bids_modality": "anat",
+    "bids_suffix": "T1w",
+    "bids_entities": {{"acq": "MPRAGE"}},
+    "bids_confidence": 0.95,
+    "bids_path": "anat/sub-{{subject}}_ses-{{session}}_acq-MPRAGE_T1w"
+  }}
+]
+
+Return ONLY the JSON array, no code blocks, no explanations, no additional text.
 """
 
         try:

@@ -39,7 +39,7 @@ def main(verbose: int, quiet: bool) -> None:
     elif verbose >= 1:
         log_level = logging.INFO
     else:
-        log_level = logging.WARNING
+        log_level = logging.INFO  # Default to INFO to show prompts
 
     setup_logging(log_level)
 
@@ -358,9 +358,7 @@ def group(output_dir: Path) -> None:
 )
 @click.option(
     "--context",
-    help=(
-        "Custom context for mapping decisions (e.g., modality- or protocol-specific guidance)."
-    ),
+    help=("Custom context for mapping decisions (e.g., modality- or protocol-specific guidance)."),
 )
 @click.option(
     "--model",
