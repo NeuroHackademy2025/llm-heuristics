@@ -1,0 +1,32 @@
+DICOM Sequence Grouping Report
+==================================================
+Generated on: 2025-08-08 03:43:27
+
+Total unique groups: 279
+Total sequences represented: 4610
+
+Grouping Variables Used:
+- dim1, dim2, dim3, dim4, TR, TE
+- protocol_name, is_motion_corrected, is_derived
+- study_description, series_description, sequence_name, image_type
+
+Top Groups by Series Count:
+------------------------------
+  220 sequences: anat-scout                | anat-scout                | 512x512x3
+  212 sequences: anat_acq-vnavsetter_T2w   | anat_acq-vnavsetter_T2w   | 32x32x32
+  206 sequences: anat_T1w                  | anat_T1w                  | 256x256x176
+  201 sequences: dwi_acq-multishell_dir-AP | dwi_acq-multishell_dir-AP | 140x140x81
+  201 sequences: fmap_acq-dMRIdistmap_dir- | fmap_acq-dMRIdistmap_dir- | 140x140x81
+  201 sequences: fmap_acq-dMRIdistmap_dir- | fmap_acq-dMRIdistmap_dir- | 140x140x81
+  200 sequences: anat_T2w                  | anat_T2w                  | 256x256x176
+  199 sequences: anat_T2w                  | anat_T2w                  | 256x256x176
+  198 sequences: func_task-rest_run-01     | func_task-rest_run-01     | 90x90x60
+  193 sequences: fmap_acq-fMRIdistmap_dir- | fmap_acq-fMRIdistmap_dir- | 90x90x60
+  ... and 269 more groups
+
+Next Steps:
+-----------
+1. Run 'llm-heuristics map-bids <output_dir>' to map groups to BIDS
+2. Run 'llm-heuristics generate <output_dir>' to create heuristics
+
+Note: Groups are ready for BIDS mapping using LLM analysis.

@@ -1,0 +1,28 @@
+BIDS Mapping Report
+========================================
+Generated on: 2025-08-08 03:55:41
+
+Total groups: 279
+Successfully mapped: 154
+Mapping success rate: 55.2%
+
+Mapping by Modality:
+--------------------
+  anat: 143 groups
+  unknown: 125 groups
+  func: 11 groups
+
+Top Successful Mappings:
+-------------------------
+  212 series: anat_acq-vnavsetter_ → anat/sub-{subject}_ses-{session}_T2w (conf: 0.60)
+  206 series: anat_T1w             → anat/sub-{subject}_ses-{session}_T1w (conf: 0.60)
+  200 series: anat_T2w             → anat/sub-{subject}_ses-{session}_T2w (conf: 0.60)
+  199 series: anat_T2w             → anat/sub-{subject}_ses-{session}_T2w (conf: 0.60)
+  193 series: fmap_acq-fMRIdistmap → func/sub-{subject}_ses-{session}_task-un (conf: 0.60)
+
+Next Steps:
+-----------
+1. Review mapping results and adjust if needed
+2. Run 'llm-heuristics generate <output_dir>' to create heuristics
+
+Note: Mapped groups are ready for heuristic generation.

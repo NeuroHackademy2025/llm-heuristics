@@ -1,5 +1,7 @@
 """LLM-based BIDS mapping functionality."""
 
+from __future__ import annotations
+
 import json
 import logging
 import re
@@ -215,7 +217,15 @@ Return only the JSON array, no additional text.
 
         try:
             # Get LLM response
+            logger.debug("Calling LLM with prompt size %d chars", len(prompt))
+            logger.info("=== LLM PROMPT FOR BIDS MAPPING ===")
+            logger.info(prompt)
+            logger.info("=== END PROMPT ===")
             response = self.llm_model.complete(prompt)
+            logger.debug("Got LLM response, length: %d chars", len(response))
+            logger.debug(
+                "Raw LLM response (first 1000 chars): %s", response[:1000].replace("\n", "\\n")
+            )
 
             # Parse JSON response with robustness
             try:
@@ -224,9 +234,7 @@ Return only the JSON array, no additional text.
                 # Try to extract JSON from code fences or surrounding text
                 cleaned = self._extract_json_array(response)
                 if cleaned is None:
-                    logger.warning(
-                        "Failed to parse LLM response for batch: %s", e1
-                    )
+                    logger.warning("Failed to parse LLM response for batch: %s", e1)
                     logger.debug(
                         "Raw LLM response (truncated 500): %s",
                         response[:500].replace("\n", "\\n"),
@@ -235,31 +243,45 @@ Return only the JSON array, no additional text.
                 try:
                     mappings = json.loads(cleaned)
                 except json.JSONDecodeError as e2:
+                    logger.warning("Failed to parse cleaned LLM JSON for batch: %s", e2)
                     logger.warning(
-                        "Failed to parse cleaned LLM JSON for batch: %s", e2
-                    )
-                    logger.debug(
-                        "Cleaned JSON candidate (truncated 500): %s",
-                        cleaned[:500].replace("\n", "\\n"),
+                        "Cleaned JSON candidate (truncated 1000): %s",
+                        cleaned[:1000].replace("\n", "\\n"),
                     )
                     raise
 
             # Validate and clean up mappings
             validated_mappings = []
+            logger.debug(
+                "Got %d mappings from LLM, validating against %d groups",
+                len(mappings),
+                len(batch_data),
+            )
             for i, mapping in enumerate(mappings):
+                if i >= len(batch_data):
+                    logger.warning(
+                        "LLM returned more mappings (%d) than input groups (%d), truncating",
+                        len(mappings),
+                        len(batch_data),
+                    )
+                    break
                 validated_mapping = self._validate_mapping(mapping, batch_data[i])
                 validated_mappings.append(validated_mapping)
 
             return validated_mappings
 
         except (json.JSONDecodeError, KeyError, IndexError) as e:
-            logger.warning(
-                "Failed to parse LLM response for batch, using fallback: %r", e
-            )
+            logger.warning("Failed to parse LLM response for batch, using fallback: %r", e)
             logger.debug(
                 "Falling back due to parse error. Prompt size=%d chars",
                 len(prompt),
             )
+            # Log the response if we got one
+            if "response" in locals():
+                logger.warning(
+                    "Raw LLM response that failed to parse (first 500 chars): %s",
+                    response[:500].replace("\n", "\\n"),
+                )
             # Fallback to basic mapping
             return [self._fallback_mapping(group) for group in batch_data]
 
@@ -291,20 +313,30 @@ Return only the JSON array, no additional text.
         if start == -1:
             return None
 
-        # Heuristic: find the last closing bracket
-        end = s.rfind("]")
-        if end == -1 or end <= start:
+        # Find the matching closing bracket by counting brackets
+        bracket_count = 0
+        end = start
+        for i, char in enumerate(s[start:], start):
+            if char == "[":
+                bracket_count += 1
+            elif char == "]":
+                bracket_count -= 1
+                if bracket_count == 0:
+                    end = i
+                    break
+        else:
+            # No matching closing bracket found
             return None
 
         candidate = s[start : end + 1]
 
-        # Basic sanity check: ensure brackets are somewhat balanced
-        if candidate.count("[") >= 1 and candidate.count("]") >= 1:
-            # Remove trailing commas before closing brackets, a common LLM error
-            candidate = re.sub(r",\s*]", "]", candidate)
-            return candidate
+        # Remove trailing commas before closing brackets, a common LLM error
+        candidate = re.sub(r",\s*]", "]", candidate)
 
-        return None
+        # Additional cleanup: remove trailing commas before closing braces
+        candidate = re.sub(r",\s*}", "}", candidate)
+
+        return candidate
 
     def _validate_mapping(self, mapping: dict, group_info: dict) -> dict[str, Any]:
         """Validate and clean up LLM mapping result."""

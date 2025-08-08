@@ -268,6 +268,11 @@ Provide a clear, numbered explanation that a researcher could easily understand.
     def _generate_with_llm(self, prompt: str) -> str:
         """Generate text using the LLM."""
 
+        # Log the prompt being sent to LLM
+        logger.info("=== LLM PROMPT FOR HEURISTIC GENERATION ===")
+        logger.info(prompt)
+        logger.info("=== END PROMPT ===")
+
         # Prepare input
         messages = [
             {
@@ -313,12 +318,25 @@ Provide a clear, numbered explanation that a researcher could easily understand.
             )
 
         # Decode response
-        response = self.tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[1] :],
-            skip_special_tokens=True,
-        )
+        try:
+            input_length = inputs["input_ids"].shape[1]
+            if len(outputs[0]) <= input_length:
+                logger.warning("Model generated no new tokens, returning empty response")
+                return ""
 
-        return response.strip()
+            response = self.tokenizer.decode(
+                outputs[0][input_length:],
+                skip_special_tokens=True,
+            )
+            return response.strip()
+        except (IndexError, RuntimeError) as e:
+            logger.error("Error decoding model output: %s", e)
+            logger.debug(
+                "Outputs shape: %s, Input length: %d",
+                getattr(outputs[0], "shape", "unknown"),
+                inputs["input_ids"].shape[1] if "input_ids" in inputs else -1,
+            )
+            return ""
 
     def complete(self, prompt: str) -> str:
         """Return a plain text completion for an arbitrary prompt."""
