@@ -7,11 +7,11 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-class SeriesGrouper:
+class SequencesGrouper:
     """Class for grouping DICOM sequences based on key characteristics."""
 
     def __init__(self):
-        """Initialize the SeriesGrouper."""
+        """Initialize the SequencesGrouper."""
         self.grouping_variables = [
             "protocol_name",
             "series_description",

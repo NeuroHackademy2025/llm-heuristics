@@ -47,7 +47,7 @@ class LLMBIDSMapper:
         Parameters
         ----------
         grouped_df : pd.DataFrame
-            DataFrame with grouped series from SeriesGrouper
+            DataFrame with grouped series from SequencesGrouper
 
         Returns
         -------

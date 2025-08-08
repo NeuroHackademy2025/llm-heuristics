@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from llm_heuristics.core.heudiconv_extractor import HeuDiConvExtractor
-from llm_heuristics.core.series_grouper import SeriesGrouper
+from llm_heuristics.core.sequences_grouper import SequencesGrouper
 from llm_heuristics.models.llama_model import LlamaModel
 from llm_heuristics.utils.templates import HeuristicTemplate
 
@@ -51,7 +51,7 @@ class HeuristicGenerator:
         # For analyze command: only need dicom_extractor
         # For generate command: only need llm_model and template
         self.dicom_extractor = HeuDiConvExtractor(n_cpus=n_cpus, slurm=slurm)
-        self.series_grouper = SeriesGrouper()
+        self.sequences_grouper = SequencesGrouper()
         self.llm_model = LlamaModel(
             model_name=model_name,
             use_quantization=use_quantization,

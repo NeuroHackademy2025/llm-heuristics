@@ -357,10 +357,10 @@ def group(output_dir: Path) -> None:
     console.print(f"[bold blue]Input file:[/bold blue] {aggregated_dicominfo_path}")
 
     try:
-        # Initialize generator (only need series_grouper, not LLM)
-        from llm_heuristics.core.series_grouper import SeriesGrouper
+        # Initialize generator (only need sequences_grouper, not LLM)
+        from llm_heuristics.core.sequences_grouper import SequencesGrouper
 
-        grouper = SeriesGrouper()
+        grouper = SequencesGrouper()
 
         # Define output files
         grouped_output_path = output_dir / "aggregated_dicominfo_groups.tsv"
