@@ -185,7 +185,9 @@ EXAMPLE OUTPUT FORMAT:
             return []
 
         logger.debug(
-            "Processing batch with %d rows, columns: %s", len(batch_df), list(batch_df.columns)
+            "Processing batch with %d rows, columns: %s",
+            len(batch_df),
+            list(batch_df.columns),
         )
 
         # Prepare batch data for LLM
