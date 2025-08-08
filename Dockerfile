@@ -18,6 +18,7 @@ RUN apt-get update && \
       python3-dev \
       python3-venv \
       python3-pip \
+      ca-certificates \
       dcm2niix \
       pigz \
       wget \
@@ -35,13 +36,16 @@ WORKDIR /home/llmuser/app
 COPY --chown=llmuser:llmuser . /home/llmuser/app
 
 # Set version for setuptools-scm (since .git folder isn't available in Docker)
-ENV SETUPTOOLS_SCM_PRETEND_VERSION=0.1.0
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=0.1.0 \
+    PYTHONPATH=/home/llmuser/app
 
 # Upgrade pip and install dependencies from pyproject.toml
 RUN python3 -m pip install --upgrade pip setuptools wheel --break-system-packages && \
     pip install --no-cache-dir --break-system-packages \
-      torch>=2.0.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 && \
-    pip install --no-cache-dir --break-system-packages -e .[test,dev]
+      torch>=2.0.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 \
+      --trusted-host download.pytorch.org && \
+    pip install --no-cache-dir --break-system-packages '.[test,dev]' \
+      --trusted-host pypi.org --trusted-host files.pythonhosted.org
 
 # Shell aliases
 RUN echo 'alias ll="ls -la"' >> /home/llmuser/.bashrc && \
