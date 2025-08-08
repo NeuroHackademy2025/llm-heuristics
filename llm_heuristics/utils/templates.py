@@ -263,28 +263,26 @@ def infotodict(
         return """You are an expert neuroimaging researcher who creates heudiconv
 heuristic files for converting DICOM data to BIDS format.
 
-We already ran a mapping step that grouped DICOM series and assigned BIDS
-modalities, suffixes, and entities. Use ONLY the mapped output below to
-produce a concise and correct heuristic that follows heudiconv conventions.
-
-STUDY INFORMATION:
-- DICOM Directory: {{ study_info.dicom_dir }}
-- Total Mapped Groups: {{ study_info.num_unique_groups }}
+Based on the BIDS mappings below, generate a complete heudiconv heuristic.py.
+Follows the exact structure of heudiconv's convertall.py template.
 
 MAPPED BIDS ASSIGNMENTS:
 {% for group in sequences_info -%}
 Group {{ loop.index }}:
   - BIDS Path: {{ group.bids_path }}
-  - Modality: {{ group.bids_modality }}
-  - Suffix: {{ group.bids_suffix }}
-  - Entities: {{ group.bids_entities }}
-  - Series Count: {{ group.series_count }}
-  - Protocol: {{ group.protocol_name }}
-  - Description: {{ group.series_description }}
-  - Sequence: {{ group.sequence_name }}
+  - Protocol Name: {{ group.protocol_name }}
+  - Series Description: {{ group.series_description }}
+  - Sequence Name: {{ group.sequence_name }}
   - Dimensions: {{ group.dim1 }}x{{ group.dim2 }}x{{ group.dim3 }}x{{ group.dim4 }}
   - TR: {{ group.TR }} ms
-  - Motion Corrected: {{ group.is_motion_corrected }}
+  - TE: {{ group.TE }} ms
+  - Image Type: {{ group.image_type }}
+  - Is Derived: {{ group.is_derived }}
+  - Is Motion Corrected: {{ group.is_motion_corrected }}
+  - Series Count: {{ group.series_count }}
+  - Total Files: {{ group.total_files }}
+  - Representative Series ID: {{ group.representative_series_id }}
+  - Example DICOM: {{ group.example_dcm_file }}
 
 {% endfor %}
 
@@ -293,22 +291,19 @@ CUSTOM CONTEXT:
 {{ additional_context }}
 {% endif %}
 
-Please generate a complete heuristic.py file that:
+Generate a complete Python heuristic file using this structure:
 
-1. Imports create_key from heudiconv.utils
-2. Defines the infotodict function following heudiconv standards
-3. Creates BIDS keys for each mapped group using the exact paths above
-4. Implements conditional logic to assign sequences to the correct BIDS keys
-5. Uses standard heudiconv SeqInfo fields (s.protocol_name, s.series_description, etc.)
-6. Applies the custom context rules if provided
+1. Import the required modules from heudiconv
+2. Define the create_key function exactly as shown in heudiconv's convertall.py
+3. Define the infotodict function that maps sequences to BIDS paths
+4. Use the protocol names and descriptions above to identify sequences
+5. Apply context-based filters including:
+   - Motion correction filters (is_motion_corrected)
+   - Derived data filters (is_derived)
+   - Image type filters (image_type) for cases like NORM vs non-NORM scans
+6. Handle BIDS entity variations like _rec-norm_ based on image_type content
 
-Important:
-- Use the exact BIDS paths provided in the mappings
-- Make sure the logic correctly identified each sequence type
-- Follow heudiconv conventions for the infotodict function
-- Be specific in your conditions to avoid misclassification
-
-Generate the complete Python heuristic file:"""
+Return ONLY valid Python code that follows heudiconv conventions."""
 
     def get_common_bids_patterns(self) -> dict[str, str]:
         """Get ALL BIDS naming patterns directly from schema rules (no hardcoding)."""

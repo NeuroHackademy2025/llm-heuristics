@@ -49,10 +49,7 @@ def main(verbose: int, quiet: bool) -> None:
 @click.option(
     "--infile",
     type=click.Path(exists=True, path_type=Path),
-    help=(
-        "Input mapped TSV file. "
-        "Defaults to OUTPUT_DIR/aggregated_dicominfo_mapped.tsv"
-    ),
+    help=("Input mapped TSV file. Defaults to OUTPUT_DIR/aggregated_dicominfo_mapped.tsv"),
 )
 @click.option(
     "--output",
@@ -359,10 +356,7 @@ def group(output_dir: Path) -> None:
 @click.option(
     "--infile",
     type=click.Path(exists=True, path_type=Path),
-    help=(
-        "Input grouped TSV file. "
-        "Defaults to OUTPUT_DIR/aggregated_dicominfo_groups.tsv"
-    ),
+    help=("Input grouped TSV file. Defaults to OUTPUT_DIR/aggregated_dicominfo_groups.tsv"),
 )
 @click.option(
     "--output",
@@ -438,7 +432,7 @@ def map_bids(
         mapped_output_path = output or (output_dir / "aggregated_dicominfo_mapped.tsv")
         # Report goes next to the mapped TSV
         report_output_path = mapped_output_path.with_name("mapping_report.txt")
-        
+
         # Ensure output directory exists
         mapped_output_path.parent.mkdir(parents=True, exist_ok=True)
 
