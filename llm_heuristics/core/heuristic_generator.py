@@ -47,21 +47,35 @@ class HeuristicGenerator:
         **model_kwargs
             Additional arguments for the model (used for map and generate commands)
         """
-        # Only initialize components based on what's needed
-        # For analyze command: only need dicom_extractor
-        # For generate command: need llm_model and template
-        # For map command: need llm_model
+        # Always initialize basic components
         self.dicom_extractor = HeuDiConvExtractor(n_cpus=n_cpus, slurm=slurm)
         self.sequences_grouper = SequencesGrouper()
 
-        # LLM model is needed for both map and generate commands
-        self.llm_model = LlamaModel(
-            model_name=model_name,
-            use_quantization=use_quantization,
-            **model_kwargs,
-        )
+        # Store LLM parameters for lazy initialization
+        self._model_name = model_name
+        self._use_quantization = use_quantization
+        self._model_kwargs = model_kwargs
+        self._llm_model = None
+        self._template = None
 
-        self.template = HeuristicTemplate()
+    @property
+    def llm_model(self) -> LlamaModel:
+        """Lazy initialization of LLM model (only when needed)."""
+        if self._llm_model is None:
+            logger.info("Initializing LLM model: %s", self._model_name)
+            self._llm_model = LlamaModel(
+                model_name=self._model_name,
+                use_quantization=self._use_quantization,
+                **self._model_kwargs,
+            )
+        return self._llm_model
+
+    @property
+    def template(self) -> HeuristicTemplate:
+        """Lazy initialization of heuristic template (only when needed)."""
+        if self._template is None:
+            self._template = HeuristicTemplate()
+        return self._template
 
     def generate_from_mapped_tsv(
         self,
