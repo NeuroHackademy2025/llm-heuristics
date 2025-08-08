@@ -47,6 +47,11 @@ def main(verbose: int, quiet: bool) -> None:
 @main.command()
 @click.argument("output_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option(
+    "--infile",
+    type=click.Path(exists=True, path_type=Path),
+    help=("Input mapped TSV file. Defaults to OUTPUT_DIR/aggregated_dicominfo_mapped.tsv"),
+)
+@click.option(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
@@ -69,6 +74,7 @@ def main(verbose: int, quiet: bool) -> None:
 )
 def generate(
     output_dir: Path,
+    infile: Path | None,
     output: Path | None,
     model: str,
     no_quantization: bool,
@@ -89,8 +95,8 @@ def generate(
     console.print(f"[bold green]Generating heuristic from mapped data:[/bold green] {output_dir}")
     console.print("[dim]Privacy Note: All LLM processing happens locally[/dim]")
 
-    # Check for required aggregated_dicominfo_mapped.tsv file
-    mapped_dicominfo_path = output_dir / "aggregated_dicominfo_mapped.tsv"
+    # Use infile if provided, otherwise default path
+    mapped_dicominfo_path = infile or (output_dir / "aggregated_dicominfo_mapped.tsv")
     if not mapped_dicominfo_path.exists():
         console.print(
             f"[bold red]Error:[/bold red] Required file not found: {mapped_dicominfo_path}"
@@ -348,6 +354,11 @@ def group(output_dir: Path) -> None:
 @main.command()
 @click.argument("output_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option(
+    "--infile",
+    type=click.Path(exists=True, path_type=Path),
+    help=("Input grouped TSV file. Defaults to OUTPUT_DIR/aggregated_dicominfo_groups.tsv"),
+)
+@click.option(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
@@ -369,7 +380,12 @@ def group(output_dir: Path) -> None:
     "--no-quantization", is_flag=True, help="Disable model quantization (requires more memory)"
 )
 def map_bids(
-    output_dir: Path, output: Path | None, context: str | None, model: str, no_quantization: bool
+    output_dir: Path,
+    infile: Path | None,
+    output: Path | None,
+    context: str | None,
+    model: str,
+    no_quantization: bool,
 ) -> None:
     """Map grouped series to BIDS using LLM analysis.
 
@@ -388,8 +404,8 @@ def map_bids(
     """
     console.print(f"[bold green]Mapping series to BIDS using LLM:[/bold green] {output_dir}")
 
-    # Check for required input file
-    grouped_dicominfo_path = output_dir / "aggregated_dicominfo_groups.tsv"
+    # Use infile if provided, otherwise default path
+    grouped_dicominfo_path = infile or (output_dir / "aggregated_dicominfo_groups.tsv")
     if not grouped_dicominfo_path.exists():
         console.print(
             f"[bold red]Error:[/bold red] Required file not found: {grouped_dicominfo_path}"
@@ -416,6 +432,9 @@ def map_bids(
         mapped_output_path = output or (output_dir / "aggregated_dicominfo_mapped.tsv")
         # Report goes next to the mapped TSV
         report_output_path = mapped_output_path.with_name("mapping_report.txt")
+
+        # Ensure output directory exists
+        mapped_output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with console.status("Mapping groups to BIDS using LLM analysis..."):
             # Read the grouped data
