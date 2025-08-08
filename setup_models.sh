@@ -32,7 +32,7 @@ echo "Models will be downloaded to: $MODELS_DIR"
 # Download models
 echo ""
 echo "Logging into Hugging Face CLI..."
-huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential
+hf auth login --token "$HF_TOKEN" --add-to-git-credential
 
 echo "Downloading Llama models using Hugging Face CLI..."
 echo "Note: This may download up to ~140GB of model data, depending on selections"
