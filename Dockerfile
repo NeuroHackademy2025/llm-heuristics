@@ -32,8 +32,13 @@ RUN apt-get update && \
 USER llmuser
 WORKDIR /home/llmuser/app
 
-# Copy your app first
-COPY --chown=llmuser:llmuser . /home/llmuser/app
+# Copy only necessary files (avoids .git and other excluded files)
+COPY --chown=llmuser:llmuser pyproject.toml README.md /home/llmuser/app/
+COPY --chown=llmuser:llmuser llm_heuristics/ /home/llmuser/app/llm_heuristics/
+
+# Ensure no .git artifacts are present (cleanup just in case)
+RUN find /home/llmuser/app -name ".git*" -type f -delete 2>/dev/null || true && \
+    find /home/llmuser/app -name ".git" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # Set version for setuptools-scm (since .git folder isn't available in Docker)
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=0.1.0 \
