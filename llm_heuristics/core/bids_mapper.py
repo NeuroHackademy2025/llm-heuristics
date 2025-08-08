@@ -43,7 +43,9 @@ class LLMBIDSMapper:
         )
         self.bids_schema = BIDSSchemaIntegration()
 
-    def map_groups_to_bids(self, grouped_df: pd.DataFrame) -> pd.DataFrame:
+    def map_groups_to_bids(
+        self, grouped_df: pd.DataFrame, additional_context: str | None = None
+    ) -> pd.DataFrame:
         """
         Map grouped DICOM series to BIDS using LLM analysis.
 
@@ -60,7 +62,7 @@ class LLMBIDSMapper:
         logger.info("Mapping %d groups to BIDS using LLM analysis", len(grouped_df))
 
         # Prepare BIDS schema context
-        bids_context = self._prepare_bids_context()
+        bids_context = self._prepare_bids_context(additional_context=additional_context)
 
         # Process groups in batches to avoid token limits
         batch_size = 10
@@ -110,7 +112,7 @@ class LLMBIDSMapper:
             logger.warning("Could not extract MRI modalities from schema: %s, using fallback", e)
             return ["anat", "func", "fmap", "dwi", "perf"]
 
-    def _prepare_bids_context(self) -> str:
+    def _prepare_bids_context(self, additional_context: str | None = None) -> str:
         """Prepare comprehensive BIDS context for LLM."""
         # Get BIDS schema information
         schema_info = self.bids_schema.get_schema_version_info()
@@ -169,6 +171,8 @@ EXAMPLE OUTPUT FORMAT:
   "bids_path": "anat/sub-{{subject}}_ses-{{session}}_acq-MPRAGE_T1w"
 }}
 """
+        if additional_context:
+            context += f"\nADDITIONAL CONTEXT:\n{additional_context}\n"
         return context
 
     def _map_batch_to_bids(
