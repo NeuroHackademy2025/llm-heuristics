@@ -179,24 +179,51 @@ EXAMPLE OUTPUT FORMAT:
         self, batch_df: pd.DataFrame, bids_context: str
     ) -> list[dict[str, Any]]:
         """Map a batch of groups to BIDS using LLM."""
+        # Validate input DataFrame
+        if batch_df.empty:
+            logger.warning("Empty batch DataFrame provided")
+            return []
+
+        logger.debug(
+            "Processing batch with %d rows, columns: %s", len(batch_df), list(batch_df.columns)
+        )
+
         # Prepare batch data for LLM
         batch_data = []
-        for _, row in batch_df.iterrows():
-            group_info = {
-                "protocol_name": str(row.get("protocol_name", "Unknown")),
-                "series_description": str(row.get("series_description", "Unknown")),
-                "sequence_name": str(row.get("sequence_name", "Unknown")),
-                "dimensions": (
-                    f"{row.get('dim1', 0)}x{row.get('dim2', 0)}x"
-                    f"{row.get('dim3', 0)}x{row.get('dim4', 1)}"
-                ),
-                "TR": row.get("TR", 0),
-                "TE": row.get("TE", 0),
-                "is_motion_corrected": row.get("is_motion_corrected", False),
-                "image_type": str(row.get("image_type", "Unknown")),
-                "series_count": row.get("series_count", 1),
-            }
-            batch_data.append(group_info)
+        for idx, row in batch_df.iterrows():
+            # Debug logging to catch the error
+            logger.debug("Processing row %s of type %s", idx, type(row))
+
+            # Handle case where row might not be a pandas Series
+            if isinstance(row, str):
+                logger.error("Row is a string instead of pandas Series: %s", row)
+                continue
+
+            try:
+                group_info = {
+                    "protocol_name": str(row.get("protocol_name", "Unknown")),
+                    "series_description": str(row.get("series_description", "Unknown")),
+                    "sequence_name": str(row.get("sequence_name", "Unknown")),
+                    "dimensions": (
+                        f"{row.get('dim1', 0)}x{row.get('dim2', 0)}x"
+                        f"{row.get('dim3', 0)}x{row.get('dim4', 1)}"
+                    ),
+                    "TR": row.get("TR", 0),
+                    "TE": row.get("TE", 0),
+                    "is_motion_corrected": row.get("is_motion_corrected", False),
+                    "image_type": str(row.get("image_type", "Unknown")),
+                    "series_count": row.get("series_count", 1),
+                }
+                batch_data.append(group_info)
+            except AttributeError as e:
+                logger.error("Error processing row %s: %s. Row content: %s", idx, e, row)
+                # Skip this row and continue
+                continue
+
+        # Check if we have any valid data to process
+        if not batch_data:
+            logger.error("No valid data found in batch after processing %d rows", len(batch_df))
+            return []
 
         # Create prompt for LLM
         mri_modality_list = self._get_mri_modalities()
