@@ -338,7 +338,7 @@ def group(output_dir: Path) -> None:
         console.print("\n[bold yellow]Grouping Summary:[/bold yellow]")
         console.print(f"  Original sequences: {total_series}")
         console.print(f"  Unique groups: {unique_groups}")
-        console.print("[dim]Use the 'map' command next to map groups to BIDS[/dim]")
+        console.print("[dim]Use the 'map-bids' command next to map groups to BIDS[/dim]")
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -348,6 +348,15 @@ def group(output_dir: Path) -> None:
 @main.command()
 @click.argument("output_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help=(
+        "Optional path to write the mapped TSV. "
+        "Defaults to OUTPUT_DIR/aggregated_dicominfo_mapped.tsv"
+    ),
+)
+@click.option(
     "--model",
     default="meta-llama/Meta-Llama-3.1-70B-Instruct",
     help="LLM model to use for BIDS mapping",
@@ -355,7 +364,7 @@ def group(output_dir: Path) -> None:
 @click.option(
     "--no-quantization", is_flag=True, help="Disable model quantization (requires more memory)"
 )
-def map_bids(output_dir: Path, model: str, no_quantization: bool) -> None:
+def map_bids(output_dir: Path, output: Path | None, model: str, no_quantization: bool) -> None:
     """Map grouped series to BIDS using LLM analysis.
 
     This command reads the aggregated_dicominfo_groups.tsv file from the group output
@@ -395,9 +404,10 @@ def map_bids(output_dir: Path, model: str, no_quantization: bool) -> None:
                 use_quantization=not no_quantization,
             )
 
-        # Define output files
-        mapped_output_path = output_dir / "aggregated_dicominfo_mapped.tsv"
-        report_output_path = output_dir / "mapping_report.txt"
+        # Define output files (allow override for mapped TSV)
+        mapped_output_path = output or (output_dir / "aggregated_dicominfo_mapped.tsv")
+        # Report goes next to the mapped TSV
+        report_output_path = mapped_output_path.with_name("mapping_report.txt")
 
         with console.status("Mapping groups to BIDS using LLM analysis..."):
             # Read the grouped data
@@ -412,6 +422,8 @@ def map_bids(output_dir: Path, model: str, no_quantization: bool) -> None:
             # Generate mapping report
             report = mapper.generate_mapping_report(mapped_df)
 
+            # Ensure output directory exists
+            mapped_output_path.parent.mkdir(parents=True, exist_ok=True)
             # Save results
             mapped_df.to_csv(mapped_output_path, sep="\t", index=False)
             report_output_path.write_text(report)

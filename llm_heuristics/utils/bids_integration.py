@@ -820,29 +820,38 @@ class BIDSSchemaIntegration:
             List of entity names in standard BIDS order
         """
         try:
-            # Try to get entity order from schema
-            if hasattr(self.bids_schema, "get") and isinstance(self.bids_schema, dict):
-                # Look for entity order in schema rules or objects
-                entity_order = self.bids_schema.get("rules", {}).get("entities", [])
-                if entity_order:
-                    return entity_order
+            # Primary: bidsschematools exposes rules.entities as ordered list
+            # Handle dict-like and Namespace-like schema objects
+            rules_obj = (
+                self.bids_schema.get("rules")
+                if hasattr(self.bids_schema, "get")
+                else getattr(self.bids_schema, "rules", None)
+            )
 
-                # Alternative: extract from entity definitions
-                entities = self.entities
-                if entities:
-                    # Try to get order from entity definitions
-                    ordered_entities = []
-                    for entity_name, entity_info in entities.items():
-                        if isinstance(entity_info, dict) and "order" in entity_info:
-                            ordered_entities.append((entity_name, entity_info["order"]))
+            if rules_obj is not None:
+                entities_list = (
+                    rules_obj.get("entities")
+                    if hasattr(rules_obj, "get")
+                    else getattr(rules_obj, "entities", None)
+                )
+                if isinstance(entities_list, list) and entities_list:
+                    return entities_list
 
-                    if ordered_entities:
-                        # Sort by order and return names
-                        ordered_entities.sort(key=lambda x: x[1])
-                        return [entity[0] for entity in ordered_entities]
+            # Secondary: derive from entity definitions with 'order' fields if present
+            entities_defs = self.entities
+            ordered_entities: list[tuple[str, int]] = []
+            for entity_name, entity_info in entities_defs.items():
+                if isinstance(entity_info, dict) and "order" in entity_info:
+                    try:
+                        ordered_entities.append((entity_name, int(entity_info["order"])))
+                    except Exception:
+                        continue
+            if ordered_entities:
+                ordered_entities.sort(key=lambda x: x[1])
+                return [name for name, _ in ordered_entities]
 
-            # Fallback to standard BIDS entity order
-            logger.warning("Could not extract entity order from schema, using fallback")
+            # Fallback: conservative default order
+            logger.debug("Entity order not found in schema; using conservative default order")
             return [
                 "subject",
                 "session",
@@ -857,7 +866,7 @@ class BIDSSchemaIntegration:
             ]
 
         except Exception as e:
-            logger.warning("Error getting entity order from schema: %s, using fallback", e)
+            logger.debug("Error getting entity order from schema: %s; using default order", e)
             return [
                 "subject",
                 "session",
