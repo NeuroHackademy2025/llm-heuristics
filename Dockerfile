@@ -44,7 +44,7 @@ RUN python3 -m pip install --upgrade pip setuptools wheel --break-system-package
     pip install --no-cache-dir --break-system-packages \
       torch>=2.0.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 \
       --trusted-host download.pytorch.org && \
-    pip install --no-cache-dir --break-system-packages '.[test,dev]' \
+    pip install --no-cache-dir --break-system-packages -e '.[test,dev]' \
       --trusted-host pypi.org --trusted-host files.pythonhosted.org
 
 # Shell aliases
