@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Any
 
 import pandas as pd
@@ -216,8 +217,32 @@ Return only the JSON array, no additional text.
             # Get LLM response
             response = self.llm_model.complete(prompt)
 
-            # Parse JSON response
-            mappings = json.loads(response.strip())
+            # Parse JSON response with robustness
+            try:
+                mappings = json.loads(response.strip())
+            except json.JSONDecodeError as e1:
+                # Try to extract JSON from code fences or surrounding text
+                cleaned = self._extract_json_array(response)
+                if cleaned is None:
+                    logger.warning(
+                        "Failed to parse LLM response for batch: %s", e1
+                    )
+                    logger.debug(
+                        "Raw LLM response (truncated 500): %s",
+                        response[:500].replace("\n", "\\n"),
+                    )
+                    raise
+                try:
+                    mappings = json.loads(cleaned)
+                except json.JSONDecodeError as e2:
+                    logger.warning(
+                        "Failed to parse cleaned LLM JSON for batch: %s", e2
+                    )
+                    logger.debug(
+                        "Cleaned JSON candidate (truncated 500): %s",
+                        cleaned[:500].replace("\n", "\\n"),
+                    )
+                    raise
 
             # Validate and clean up mappings
             validated_mappings = []
@@ -228,9 +253,58 @@ Return only the JSON array, no additional text.
             return validated_mappings
 
         except (json.JSONDecodeError, KeyError, IndexError) as e:
-            logger.warning("Failed to parse LLM response for batch, using fallback: %s", e)
+            logger.warning(
+                "Failed to parse LLM response for batch, using fallback: %r", e
+            )
+            logger.debug(
+                "Falling back due to parse error. Prompt size=%d chars",
+                len(prompt),
+            )
             # Fallback to basic mapping
             return [self._fallback_mapping(group) for group in batch_data]
+
+    def _extract_json_array(self, text: str) -> str | None:
+        """Extract a JSON array from LLM output with possible code fences.
+
+        Returns a JSON string starting with '[' and ending with the matching ']'
+        if found; otherwise None.
+        """
+        if not text:
+            return None
+
+        s = text.strip()
+
+        # Remove code fences if present
+        if s.startswith("```"):
+            # Strip leading fence
+            first_newline = s.find("\n")
+            if first_newline != -1:
+                s = s[first_newline + 1 :]
+            # Strip trailing fence
+            end_fence = s.rfind("```")
+            if end_fence != -1:
+                s = s[:end_fence]
+            s = s.strip()
+
+        # Remove leading explanatory text before the first JSON array
+        start = s.find("[")
+        if start == -1:
+            return None
+
+        # Heuristic: find the last closing bracket
+        end = s.rfind("]")
+        if end == -1 or end <= start:
+            return None
+
+        candidate = s[start : end + 1]
+
+        # Basic sanity check: ensure brackets are somewhat balanced
+        if candidate.count("[") >= 1 and candidate.count("]") >= 1:
+            # Remove trailing commas before closing brackets, a common LLM error
+            candidate = re.sub(r",\s*]", "]", candidate)
+            return candidate
+
+        return None
 
     def _validate_mapping(self, mapping: dict, group_info: dict) -> dict[str, Any]:
         """Validate and clean up LLM mapping result."""
