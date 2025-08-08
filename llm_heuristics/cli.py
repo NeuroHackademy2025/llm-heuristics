@@ -39,7 +39,7 @@ def main(verbose: int, quiet: bool) -> None:
     elif verbose >= 1:
         log_level = logging.INFO
     else:
-        log_level = logging.WARNING
+        log_level = logging.INFO  # Default to INFO to show prompts
 
     setup_logging(log_level)
 
@@ -357,6 +357,10 @@ def group(output_dir: Path) -> None:
     ),
 )
 @click.option(
+    "--context",
+    help=("Custom context for mapping decisions (e.g., modality- or protocol-specific guidance)."),
+)
+@click.option(
     "--model",
     default="meta-llama/Meta-Llama-3.1-70B-Instruct",
     help="LLM model to use for BIDS mapping",
@@ -364,7 +368,9 @@ def group(output_dir: Path) -> None:
 @click.option(
     "--no-quantization", is_flag=True, help="Disable model quantization (requires more memory)"
 )
-def map_bids(output_dir: Path, output: Path | None, model: str, no_quantization: bool) -> None:
+def map_bids(
+    output_dir: Path, output: Path | None, context: str | None, model: str, no_quantization: bool
+) -> None:
     """Map grouped series to BIDS using LLM analysis.
 
     This command reads the aggregated_dicominfo_groups.tsv file from the group output
@@ -393,6 +399,8 @@ def map_bids(output_dir: Path, output: Path | None, model: str, no_quantization:
 
     console.print(f"[bold blue]Input file:[/bold blue] {grouped_dicominfo_path}")
     console.print(f"[bold blue]Model:[/bold blue] {model}")
+    if context:
+        console.print(f"[bold blue]Custom context:[/bold blue] {context}")
 
     try:
         # Initialize LLM BIDS mapper
@@ -417,7 +425,7 @@ def map_bids(output_dir: Path, output: Path | None, model: str, no_quantization:
                 raise ValueError(f"No data found in {grouped_dicominfo_path}")
 
             # Map groups to BIDS using LLM
-            mapped_df = mapper.map_groups_to_bids(grouped_df)
+            mapped_df = mapper.map_groups_to_bids(grouped_df, additional_context=context)
 
             # Generate mapping report
             report = mapper.generate_mapping_report(mapped_df)

@@ -1,5 +1,7 @@
 """LLM-based BIDS mapping functionality."""
 
+from __future__ import annotations
+
 import json
 import logging
 import re
@@ -41,7 +43,9 @@ class LLMBIDSMapper:
         )
         self.bids_schema = BIDSSchemaIntegration()
 
-    def map_groups_to_bids(self, grouped_df: pd.DataFrame) -> pd.DataFrame:
+    def map_groups_to_bids(
+        self, grouped_df: pd.DataFrame, additional_context: str | None = None
+    ) -> pd.DataFrame:
         """
         Map grouped DICOM series to BIDS using LLM analysis.
 
@@ -58,7 +62,7 @@ class LLMBIDSMapper:
         logger.info("Mapping %d groups to BIDS using LLM analysis", len(grouped_df))
 
         # Prepare BIDS schema context
-        bids_context = self._prepare_bids_context()
+        bids_context = self._prepare_bids_context(additional_context=additional_context)
 
         # Process groups in batches to avoid token limits
         batch_size = 10
@@ -95,34 +99,65 @@ class LLMBIDSMapper:
         return result_df
 
     def _get_mri_modalities(self) -> list[str]:
-        """Dynamically get MRI modalities from BIDS schema."""
+        """Dynamically get MRI-related datatypes from BIDS schema."""
         try:
-            # Get MRI datatypes from BIDS schema
-            mri_datatypes = self.bids_schema.bids_schema["rules"]["modalities"]["mri"]["datatypes"]
-            if isinstance(mri_datatypes, list):
+            # Get MRI datatypes directly from schema rules
+            rules = self.bids_schema.bids_schema.get("rules", {})
+            modalities = rules.get("modalities", {})
+
+            if hasattr(modalities, "mri") and hasattr(modalities.mri, "datatypes"):
+                mri_datatypes = modalities.mri.datatypes
+                logger.debug("Found MRI datatypes from schema: %s", mri_datatypes)
                 return mri_datatypes
             else:
-                logger.warning("MRI datatypes not found in schema, using fallback")
+                logger.warning("MRI datatypes not found in schema rules, using fallback")
                 return ["anat", "func", "fmap", "dwi", "perf"]
-        except (KeyError, TypeError) as e:
-            logger.warning("Could not extract MRI modalities from schema: %s, using fallback", e)
+
+        except (KeyError, TypeError, AttributeError) as e:
+            logger.warning("Could not extract MRI datatypes from schema: %s, using fallback", e)
             return ["anat", "func", "fmap", "dwi", "perf"]
 
-    def _prepare_bids_context(self) -> str:
+    def _prepare_bids_context(self, additional_context: str | None = None) -> str:
         """Prepare comprehensive BIDS context for LLM."""
         # Get BIDS schema information
         schema_info = self.bids_schema.get_schema_version_info()
 
-        # Get MRI-specific modalities dynamically from schema
-        mri_modality_list = self._get_mri_modalities()
-        mri_modalities = {}
-        for modality_name, modality_info in self.bids_schema.modalities.items():
-            if modality_name in mri_modality_list:
-                mri_modalities[modality_name] = {
-                    "name": modality_info.get("name", ""),
-                    "description": modality_info.get("description", ""),
-                    "suffixes": list(modality_info.get("suffixes", {}).keys()),
-                }
+        # Get MRI-specific datatypes and their suffixes from schema
+        mri_datatype_list = self._get_mri_modalities()
+        mri_datatypes_info = {}
+
+        # Get datatypes and files rules from schema
+        datatypes_obj = self.bids_schema.bids_schema.get("objects", {}).get("datatypes", {})
+        files_rules = self.bids_schema.bids_schema.get("rules", {}).get("files", {}).get("raw", {})
+
+        for datatype_name in mri_datatype_list:
+            # Get datatype information
+            datatype_info = None
+            if hasattr(datatypes_obj, datatype_name):
+                datatype_info = getattr(datatypes_obj, datatype_name)
+
+            # Get suffixes for this datatype from files rules
+            datatype_suffixes = []
+            if hasattr(files_rules, datatype_name):
+                datatype_files = getattr(files_rules, datatype_name)
+                # Collect all suffixes from all categories within this datatype
+                if hasattr(datatype_files, "keys"):
+                    for category in datatype_files:
+                        category_obj = getattr(datatype_files, category)
+                        if hasattr(category_obj, "suffixes"):
+                            datatype_suffixes.extend(category_obj.suffixes)
+                    # Remove duplicates and sort
+                    datatype_suffixes = sorted(set(datatype_suffixes))
+
+            mri_datatypes_info[datatype_name] = {
+                "name": getattr(datatype_info, "display_name", datatype_name)
+                if datatype_info and hasattr(datatype_info, "display_name")
+                else datatype_name,
+                "description": getattr(datatype_info, "description", "")
+                if datatype_info and hasattr(datatype_info, "description")
+                else "",
+                "suffixes": datatype_suffixes,
+            }
 
         # Get entity information and order
         entities_info = {}
@@ -139,8 +174,8 @@ class LLMBIDSMapper:
         context = f"""
 BIDS Schema (v{schema_info.get("version", "unknown")}):
 
-MRI MODALITIES AND SUFFIXES:
-{json.dumps(mri_modalities, indent=2)}
+MRI DATATYPES AND SUFFIXES:
+{json.dumps(mri_datatypes_info, indent=2)}
 
 ENTITIES (for path construction):
 {json.dumps(entities_info, indent=2)}
@@ -148,15 +183,15 @@ ENTITIES (for path construction):
 ENTITY ORDER (for path construction):
 {json.dumps(entity_order, indent=2)}
 
-TASK: Map DICOM series groups to appropriate BIDS modality, suffix, and entities.
+TASK: Map DICOM series groups to appropriate BIDS datatype, suffix, and entities.
 
 CONSTRAINTS:
-- Only use MRI-related modalities: {", ".join(mri_modality_list)}
-- Use only suffixes that exist in the BIDS schema
+- Only use MRI-related datatypes: {", ".join(mri_datatype_list)}
+- Use only suffixes that exist in the BIDS schema for each datatype
 - Assign entities based on DICOM information when possible
 - Follow entity order when constructing BIDS paths
 - Generate confidence score (0.0-1.0) for each mapping
-- Create BIDS path template: modality/sub-{{subject}}_ses-{{session}}_[entities]_suffix
+- Create BIDS path template: datatype/sub-{{subject}}_ses-{{session}}_[entities]_suffix
 
 EXAMPLE OUTPUT FORMAT:
 {{
@@ -167,55 +202,107 @@ EXAMPLE OUTPUT FORMAT:
   "bids_path": "anat/sub-{{subject}}_ses-{{session}}_acq-MPRAGE_T1w"
 }}
 """
+        if additional_context:
+            context += f"\nADDITIONAL CONTEXT:\n{additional_context}\n"
         return context
 
     def _map_batch_to_bids(
         self, batch_df: pd.DataFrame, bids_context: str
     ) -> list[dict[str, Any]]:
         """Map a batch of groups to BIDS using LLM."""
+        # Validate input DataFrame
+        if batch_df.empty:
+            logger.warning("Empty batch DataFrame provided")
+            return []
+
+        logger.debug(
+            "Processing batch with %d rows, columns: %s",
+            len(batch_df),
+            list(batch_df.columns),
+        )
+
         # Prepare batch data for LLM
         batch_data = []
-        for _, row in batch_df.iterrows():
-            group_info = {
-                "protocol_name": str(row.get("protocol_name", "Unknown")),
-                "series_description": str(row.get("series_description", "Unknown")),
-                "sequence_name": str(row.get("sequence_name", "Unknown")),
-                "dimensions": (
-                    f"{row.get('dim1', 0)}x{row.get('dim2', 0)}x"
-                    f"{row.get('dim3', 0)}x{row.get('dim4', 1)}"
-                ),
-                "TR": row.get("TR", 0),
-                "TE": row.get("TE", 0),
-                "is_motion_corrected": row.get("is_motion_corrected", False),
-                "image_type": str(row.get("image_type", "Unknown")),
-                "series_count": row.get("series_count", 1),
-            }
-            batch_data.append(group_info)
+        for idx, row in batch_df.iterrows():
+            # Debug logging to catch the error
+            logger.debug("Processing row %s of type %s", idx, type(row))
+
+            # Handle case where row might not be a pandas Series
+            if isinstance(row, str):
+                logger.error("Row is a string instead of pandas Series: %s", row)
+                continue
+
+            try:
+                group_info = {
+                    "protocol_name": str(row.get("protocol_name", "Unknown")),
+                    "series_description": str(row.get("series_description", "Unknown")),
+                    "sequence_name": str(row.get("sequence_name", "Unknown")),
+                    "dimensions": (
+                        f"{row.get('dim1', 0)}x{row.get('dim2', 0)}x"
+                        f"{row.get('dim3', 0)}x{row.get('dim4', 1)}"
+                    ),
+                    "TR": row.get("TR", 0),
+                    "TE": row.get("TE", 0),
+                    "is_motion_corrected": row.get("is_motion_corrected", False),
+                    "image_type": str(row.get("image_type", "Unknown")),
+                    "series_count": row.get("series_count", 1),
+                }
+                batch_data.append(group_info)
+            except AttributeError as e:
+                logger.error("Error processing row %s: %s. Row content: %s", idx, e, row)
+                # Skip this row and continue
+                continue
+
+        # Check if we have any valid data to process
+        if not batch_data:
+            logger.error("No valid data found in batch after processing %d rows", len(batch_df))
+            return []
 
         # Create prompt for LLM
-        mri_modality_list = self._get_mri_modalities()
+        mri_datatype_list = self._get_mri_modalities()
         prompt = f"""
 {bids_context}
 
 Groups to map (JSON):
 {json.dumps(batch_data, indent=2)}
 
-Please map each group to BIDS format. Return a JSON array with one mapping per group,
-in the same order as the input groups.
+TASK: Map each group to BIDS schema.
 
-Each mapping should include:
-- bids_modality: one of {mri_modality_list}
-- bids_suffix: appropriate suffix from BIDS schema
+IMPORTANT: You must return ONLY a valid JSON array with one mapping per group, in the same order
+as the input groups. Do not include any Python code, explanations, or markdown formatting.
+
+Each mapping object in the array should include:
+- bids_modality: one of {mri_datatype_list} (use the datatype name like "anat", "func", etc.)
+- bids_suffix: appropriate suffix from BIDS schema (use only suffixes valid for the datatype)
 - bids_entities: dictionary of entities (e.g., {{"acq": "value", "task": "value"}})
 - bids_confidence: confidence score (0.0-1.0)
 - bids_path: full BIDS path template
 
-Return only the JSON array, no additional text.
+Example format:
+[
+  {{
+    "bids_modality": "anat",
+    "bids_suffix": "T1w",
+    "bids_entities": {{"acq": "MPRAGE"}},
+    "bids_confidence": 0.95,
+    "bids_path": "anat/sub-{{subject}}_ses-{{session}}_acq-MPRAGE_T1w"
+  }}
+]
+
+Return ONLY the JSON array, no code blocks, no explanations, no additional text.
 """
 
         try:
             # Get LLM response
+            logger.debug("Calling LLM with prompt size %d chars", len(prompt))
+            logger.info("=== LLM PROMPT FOR BIDS MAPPING ===")
+            logger.info(prompt)
+            logger.info("=== END PROMPT ===")
             response = self.llm_model.complete(prompt)
+            logger.debug("Got LLM response, length: %d chars", len(response))
+            logger.debug(
+                "Raw LLM response (first 1000 chars): %s", response[:1000].replace("\n", "\\n")
+            )
 
             # Parse JSON response with robustness
             try:
@@ -224,9 +311,7 @@ Return only the JSON array, no additional text.
                 # Try to extract JSON from code fences or surrounding text
                 cleaned = self._extract_json_array(response)
                 if cleaned is None:
-                    logger.warning(
-                        "Failed to parse LLM response for batch: %s", e1
-                    )
+                    logger.warning("Failed to parse LLM response for batch: %s", e1)
                     logger.debug(
                         "Raw LLM response (truncated 500): %s",
                         response[:500].replace("\n", "\\n"),
@@ -235,31 +320,45 @@ Return only the JSON array, no additional text.
                 try:
                     mappings = json.loads(cleaned)
                 except json.JSONDecodeError as e2:
+                    logger.warning("Failed to parse cleaned LLM JSON for batch: %s", e2)
                     logger.warning(
-                        "Failed to parse cleaned LLM JSON for batch: %s", e2
-                    )
-                    logger.debug(
-                        "Cleaned JSON candidate (truncated 500): %s",
-                        cleaned[:500].replace("\n", "\\n"),
+                        "Cleaned JSON candidate (truncated 1000): %s",
+                        cleaned[:1000].replace("\n", "\\n"),
                     )
                     raise
 
             # Validate and clean up mappings
             validated_mappings = []
+            logger.debug(
+                "Got %d mappings from LLM, validating against %d groups",
+                len(mappings),
+                len(batch_data),
+            )
             for i, mapping in enumerate(mappings):
+                if i >= len(batch_data):
+                    logger.warning(
+                        "LLM returned more mappings (%d) than input groups (%d), truncating",
+                        len(mappings),
+                        len(batch_data),
+                    )
+                    break
                 validated_mapping = self._validate_mapping(mapping, batch_data[i])
                 validated_mappings.append(validated_mapping)
 
             return validated_mappings
 
         except (json.JSONDecodeError, KeyError, IndexError) as e:
-            logger.warning(
-                "Failed to parse LLM response for batch, using fallback: %r", e
-            )
+            logger.warning("Failed to parse LLM response for batch, using fallback: %r", e)
             logger.debug(
                 "Falling back due to parse error. Prompt size=%d chars",
                 len(prompt),
             )
+            # Log the response if we got one
+            if "response" in locals():
+                logger.warning(
+                    "Raw LLM response that failed to parse (first 500 chars): %s",
+                    response[:500].replace("\n", "\\n"),
+                )
             # Fallback to basic mapping
             return [self._fallback_mapping(group) for group in batch_data]
 
@@ -291,20 +390,30 @@ Return only the JSON array, no additional text.
         if start == -1:
             return None
 
-        # Heuristic: find the last closing bracket
-        end = s.rfind("]")
-        if end == -1 or end <= start:
+        # Find the matching closing bracket by counting brackets
+        bracket_count = 0
+        end = start
+        for i, char in enumerate(s[start:], start):
+            if char == "[":
+                bracket_count += 1
+            elif char == "]":
+                bracket_count -= 1
+                if bracket_count == 0:
+                    end = i
+                    break
+        else:
+            # No matching closing bracket found
             return None
 
         candidate = s[start : end + 1]
 
-        # Basic sanity check: ensure brackets are somewhat balanced
-        if candidate.count("[") >= 1 and candidate.count("]") >= 1:
-            # Remove trailing commas before closing brackets, a common LLM error
-            candidate = re.sub(r",\s*]", "]", candidate)
-            return candidate
+        # Remove trailing commas before closing brackets, a common LLM error
+        candidate = re.sub(r",\s*]", "]", candidate)
 
-        return None
+        # Additional cleanup: remove trailing commas before closing braces
+        candidate = re.sub(r",\s*}", "}", candidate)
+
+        return candidate
 
     def _validate_mapping(self, mapping: dict, group_info: dict) -> dict[str, Any]:
         """Validate and clean up LLM mapping result."""
