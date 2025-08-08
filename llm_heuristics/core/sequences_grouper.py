@@ -22,6 +22,7 @@ class SequencesGrouper:
             "dim4",
             "TR",
             "TE",
+            "is_derived",
             "is_motion_corrected",
             "image_type",
         ]
@@ -61,9 +62,10 @@ class SequencesGrouper:
             if col in dicom_df.columns:
                 dicom_df[col] = pd.to_numeric(dicom_df[col], errors="coerce").fillna(0)
 
-        # Handle boolean column
-        if "is_motion_corrected" in dicom_df.columns:
-            dicom_df["is_motion_corrected"] = dicom_df["is_motion_corrected"].fillna(False)
+        # Handle boolean columns
+        for bool_col in ["is_motion_corrected", "is_derived"]:
+            if bool_col in dicom_df.columns:
+                dicom_df[bool_col] = dicom_df[bool_col].fillna(False)
 
         # Group by available variables
         grouped = (
@@ -127,9 +129,9 @@ class SequencesGrouper:
             f"Total sequences represented: {grouped_df['series_count'].sum()}",
             "",
             "Grouping Variables Used:",
-            "- protocol_name, series_description, sequence_name",
             "- dim1, dim2, dim3, dim4, TR, TE",
-            "- is_motion_corrected, image_type",
+            "- protocol_name, is_motion_corrected, is_derived",
+            "- study_description, series_description, sequence_name, image_type",
             "",
             "Top Groups by Series Count:",
             "-" * 30,

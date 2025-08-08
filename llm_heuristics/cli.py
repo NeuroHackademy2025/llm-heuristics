@@ -186,7 +186,7 @@ def analyze(
     console.print(
         f"[bold green]Analyzing DICOM directory (via HeuDiConv):[/bold green] {dicom_dir}"
     )
-    console.print("[dim]Leveraging HeuDiConv's optimized DICOM scanner[/dim]")
+    console.print("[dim]Leveraging HeuDiConv's DICOM reader[/dim]")
 
     try:
         # Initialize generator with optimization parameters
